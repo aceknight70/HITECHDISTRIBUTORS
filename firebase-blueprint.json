@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "Repair": {
+      "title": "Repair",
+      "description": "A device repair job submitted by a customer or staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique repair ID" },
+        "type": { "type": "string", "enum": ["Laptop", "Desktop", "Printer", "Monitor", "Other"] },
+        "brand": { "type": "string", "description": "Device brand & model" },
+        "problem": { "type": "string", "description": "Customer described fault" },
+        "name": { "type": "string", "description": "Customer name" },
+        "phone": { "type": "string", "description": "Customer phone number" },
+        "ref": { "type": "string", "description": "A case-insensitive unique reference code, e.g., HT-2026-001" },
+        "status": { "type": "string", "enum": ["Received", "Diagnosed", "Sent Away", "In Repair", "Returned", "Ready for Pickup"] },
+        "aiComplexity": { "type": "string", "description": "Estimated repair complexity by Gemini" },
+        "aiCategory": { "type": "string", "description": "Estimated fault category by Gemini" },
+        "submittedAt": { "type": "string", "format": "date-time", "description": "Submission time" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update time" }
+      },
+      "required": ["id", "type", "brand", "problem", "name", "phone", "status", "submittedAt"]
+    },
+    "GMRequest": {
+      "title": "GM Request",
+      "description": "An escalated request or inquiry intended for the General Manager",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique request ID" },
+        "type": { "type": "string", "enum": ["Business Partnership/Distributorship", "Large Corporate Order", "Escalated Complaint", "VIP Customer Enquiry", "Other Major Matter"] },
+        "message": { "type": "string", "description": "Inquiry content" },
+        "name": { "type": "string", "description": "Requester name" },
+        "phone": { "type": "string", "description": "Requester phone number" },
+        "preferredTime": { "type": "string", "description": "Preferred call/contact time" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Time submitted" }
+      },
+      "required": ["id", "type", "message", "name", "phone", "status", "timestamp"]
+    },
+    "Feedback": {
+      "title": "Feedback",
+      "description": "A customer review submitted via the Client Feedback room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique feedback ID" },
+        "name": { "type": "string", "description": "Reviewer name" },
+        "rating": { "type": "integer", "description": "Star rating 1 to 5" },
+        "comment": { "type": "string", "description": "Feedback comment text" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Time submitted" }
+      },
+      "required": ["id", "name", "rating", "comment", "timestamp"]
+    },
+    "PickupSchedule": {
+      "title": "Pickup Schedule",
+      "description": "A scheduled item pickup at 6 Airport Road, Warri",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique schedule ID" },
+        "name": { "type": "string", "description": "Client name" },
+        "phone": { "type": "string", "description": "Client phone" },
+        "items": { "type": "string", "description": "Description of items to pick up" },
+        "date": { "type": "string", "description": "Selected date" },
+        "timeSlot": { "type": "string", "description": "Selected time slot" },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "cancelled"] },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Time submitted" }
+      },
+      "required": ["id", "name", "phone", "items", "date", "timeSlot", "status", "timestamp"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An invoice/order generated from the invoice desk",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique order ID" },
+        "customerName": { "type": "string", "description": "Customer name" },
+        "phone": { "type": "string", "description": "Customer phone" },
+        "items": { "type": "string", "description": "JSON string or text list of cart items" },
+        "total": { "type": "number", "description": "Invoice total amount" },
+        "paid": { "type": "boolean", "description": "Payment confirmed status" },
+        "receiptUrl": { "type": "string", "description": "URL of the payment receipt slip uploaded via Vercel Blob or local fallback" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Order creation time" },
+        "status": { "type": "string", "enum": ["Pending Payment", "Paid & Awaiting Processing", "Processed & Ready", "Dispatched/Completed"] }
+      },
+      "required": ["id", "customerName", "phone", "items", "total", "paid", "timestamp", "status"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Dynamic configurations managed from the Staff portal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique setting ID" },
+        "managerStatus": { "type": "string", "enum": ["available", "busy"] },
+        "activePreset": { "type": "string", "description": "Current active pricing preset" },
+        "customDeals": { "type": "string", "description": "JSON string of custom deals added by staff" },
+        "bankDetails": { "type": "string", "description": "Active bank accounts text" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "managerStatus", "activePreset", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/repairs/{repairId}": {
+      "schema": "Repair",
+      "description": "Collection of all submitted repair tasks"
+    },
+    "/gm_requests/{requestId}": {
+      "schema": "GMRequest",
+      "description": "Escalated GM queue items"
+    },
+    "/feedback/{feedbackId}": {
+      "schema": "Feedback",
+      "description": "Customer reviews and feedback entries"
+    },
+    "/pickups/{pickupId}": {
+      "schema": "PickupSchedule",
+      "description": "Pickup scheduler slots"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Invoices and transaction logs"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Dynamic system settings"
+    }
+  }
+}

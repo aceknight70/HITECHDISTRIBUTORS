@@ -1,0 +1,6 @@
+{
+  "name": "HiTech Distributors Hublet",
+  "description": "HiTech Distributors premier portal (HiTech Emporium) in Warri, Nigeria. High-fidelity mobile interface featuring showrooms, interactive solar sizing tools, live price sheets, repair desk with AI triage, and real-time Gemini-powered assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,160 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'aceknight790@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Entity Validations
+
+    function isValidRepair(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.type is string && data.type.size() <= 32
+        && data.brand is string && data.brand.size() <= 128
+        && data.problem is string && data.problem.size() <= 1000
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && data.ref is string && data.ref.size() <= 32
+        && data.status in ['Received', 'Diagnosed', 'Sent Away', 'In Repair', 'Returned', 'Ready for Pickup']
+        && (!data.keys().hasAll(['aiComplexity']) || data.aiComplexity is string)
+        && (!data.keys().hasAll(['aiCategory']) || data.aiCategory is string)
+        && data.submittedAt is string;
+    }
+
+    function hasValidRepairKeys(data) {
+      return data.keys().hasAll(['id', 'type', 'brand', 'problem', 'name', 'phone', 'status', 'submittedAt'])
+        && (data.keys().size() == 8 || (data.keys().size() == 9 && (data.keys().hasAll(['aiComplexity']) || data.keys().hasAll(['aiCategory']))) || (data.keys().size() == 10 && data.keys().hasAll(['aiComplexity', 'aiCategory'])));
+    }
+
+    function isValidGMRequest(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.type is string && data.type.size() <= 64
+        && data.message is string && data.message.size() <= 5000
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && (!data.keys().hasAll(['preferredTime']) || data.preferredTime is string)
+        && data.status in ['pending', 'resolved']
+        && data.timestamp is string;
+    }
+
+    function hasValidGMRequestKeys(data) {
+      return data.keys().hasAll(['id', 'type', 'message', 'name', 'phone', 'status', 'timestamp'])
+        && (data.keys().size() == 7 || (data.keys().size() == 8 && data.keys().hasAll(['preferredTime'])));
+    }
+
+    function isValidFeedback(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.rating is int && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() <= 2000
+        && data.timestamp is string;
+    }
+
+    function hasValidFeedbackKeys(data) {
+      return data.keys().hasAll(['id', 'name', 'rating', 'comment', 'timestamp'])
+        && data.keys().size() == 5;
+    }
+
+    function isValidPickupSchedule(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && data.items is string && data.items.size() <= 1000
+        && data.date is string && data.date.size() <= 32
+        && data.timeSlot is string && data.timeSlot.size() <= 64
+        && data.status in ['scheduled', 'completed', 'cancelled']
+        && data.timestamp is string;
+    }
+
+    function hasValidPickupKeys(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'items', 'date', 'timeSlot', 'status', 'timestamp'])
+        && data.keys().size() == 8;
+    }
+
+    function isValidOrder(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.customerName is string && data.customerName.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && data.items is string && data.items.size() <= 5000
+        && (data.total is number || data.total is int)
+        && data.paid is bool
+        && (!data.keys().hasAll(['receiptUrl']) || data.receiptUrl is string)
+        && data.timestamp is string
+        && data.status in ['Pending Payment', 'Paid & Awaiting Processing', 'Processed & Ready', 'Dispatched/Completed'];
+    }
+
+    function hasValidOrderKeys(data) {
+      return data.keys().hasAll(['id', 'customerName', 'phone', 'items', 'total', 'paid', 'timestamp', 'status'])
+        && (data.keys().size() == 8 || (data.keys().size() == 9 && data.keys().hasAll(['receiptUrl'])));
+    }
+
+    // Collection Rules
+
+    match /repairs/{repairId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(repairId) && hasValidRepairKeys(incoming()) && isValidRepair(incoming()) && incoming().status == 'Received';
+      allow update, delete: if isAdmin();
+    }
+
+    match /gm_requests/{requestId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(requestId) && hasValidGMRequestKeys(incoming()) && isValidGMRequest(incoming()) && incoming().status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(feedbackId) && hasValidFeedbackKeys(incoming()) && isValidFeedback(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    match /pickups/{pickupId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(pickupId) && hasValidPickupKeys(incoming()) && isValidPickupSchedule(incoming()) && incoming().status == 'scheduled';
+      allow update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(orderId) && hasValidOrderKeys(incoming()) && isValidOrder(incoming()) && incoming().status == 'Pending Payment' && incoming().paid == false;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
