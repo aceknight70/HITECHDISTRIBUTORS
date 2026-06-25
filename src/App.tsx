@@ -54,6 +54,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { db, auth, ensureAuth, OperationType, handleFirestoreError } from "./lib/firebase";
 import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, setDoc, query, orderBy, limit, writeBatch } from "firebase/firestore";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
+import { HitechLogo } from "./components/HitechLogo";
+import { GalleryCard } from "./components/GalleryCard";
 
 // Global constant fallback config
 const WA_SALES = "2348065210611"; 
@@ -1622,10 +1624,10 @@ export default function App() {
         <div className="flex flex-col justify-between flex-grow p-6 select-none bg-[var(--dk)]">
           
           <div className="pt-8">
-            <div className="flex justify-between items-baseline border-b-4 border-black pb-4 mb-6">
+            <div className="flex justify-between items-center border-b-4 border-black pb-4 mb-6">
               <div className="flex flex-col text-left">
-                <span className="text-[10px] font-bold tracking-[.4em] uppercase mb-1 opacity-60 font-sans">The Network Hub</span>
-                <h1 className="text-5xl font-black tracking-tighter leading-none uppercase text-black font-sans">HiTech Hub</h1>
+                <span className="text-[10px] font-bold tracking-[.4em] uppercase mb-1.5 opacity-60 font-sans">The Network Hub</span>
+                <HitechLogo size="lg" />
               </div>
               <div className="flex flex-col text-right">
                 <span className="text-[8px] uppercase font-bold text-slate-400 tracking-widest mb-1">System Protocol</span>
@@ -1708,11 +1710,7 @@ export default function App() {
               <button onClick={() => setInStore(false)} className="p-1.5 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors">
                 <Home className="w-4 h-4" />
               </button>
-              <div className="font-black text-sm tracking-tighter flex items-center uppercase font-sans text-black">
-                <span>HI</span>
-                <span className="text-red-700">TECH</span>
-                <span className="text-[9px] uppercase text-slate-500 font-light font-mono ml-1.5 pl-1.5 border-l border-black hidden sm:inline">Hub</span>
-              </div>
+              <HitechLogo size="sm" className="ml-1" />
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -1938,16 +1936,34 @@ export default function App() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-4">
-                  {galleryImages.map((img, idx) => (
-                    <div key={idx} className="rounded-xl overflow-hidden border border-slate-800 bg-[var(--dk2)] shadow-lg">
-                      <img src={img.url} alt={img.title} referrerPolicy="no-referrer" className="w-full h-48 object-cover" />
-                      <div className="p-3">
-                        <h4 className="font-bold text-xs text-[var(--yl)] mb-1 uppercase font-mono">{img.title}</h4>
-                        <p className="text-[11px] text-slate-300">{img.caption}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(() => {
+                    try {
+                      if (!displayedProducts || displayedProducts.length === 0) {
+                        return (
+                          <div className="col-span-full text-center py-12 text-slate-400 font-mono text-sm">
+                            No products found in this preset selection.
+                          </div>
+                        );
+                      }
+                      return displayedProducts.map((p, index) => (
+                        <GalleryCard 
+                          key={p.id} 
+                          product={p} 
+                          index={index} 
+                          total={displayedProducts.length} 
+                          onView={setSelectedProduct} 
+                        />
+                      ));
+                    } catch (error) {
+                      console.error("Gallery Render Error:", error);
+                      return (
+                        <div className="col-span-full text-center py-12 text-red-400 font-mono text-sm bg-red-950/20 border border-red-900 rounded-xl">
+                          ⚠️ Unable to load gallery images at this moment.
+                        </div>
+                      );
+                    }
+                  })()}
                 </div>
               </motion.div>
             )}

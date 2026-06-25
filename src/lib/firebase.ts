@@ -8,6 +8,20 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
+// Validate Connection to Firestore on boot as required by critical constraint
+export async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('Could not reach Cloud Firestore backend'))) {
+      console.error("Please check your Firebase configuration. Currently operating in offline/cached fallback mode.");
+    } else {
+      console.warn("Firestore connection check info:", error);
+    }
+  }
+}
+testConnection();
+
 // Gracefully sign in anonymously to keep Firestore calls authenticated and safe
 export async function ensureAuth() {
   try {
