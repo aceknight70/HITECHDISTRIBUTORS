@@ -115,7 +115,7 @@ export const GalleryCard: React.FC<GalleryCardProps> = ({ product, index, total,
           </div>
 
           <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-auto">
-            <span className="text-sm font-bold font-mono text-slate-900">
+            <span className="price text-sm font-bold font-mono text-[#1a1a2e]">
               {priceDisplay}
             </span>
             <span className="text-[9px] font-mono text-slate-400 group-hover:text-slate-600 transition-colors flex items-center gap-1">

@@ -18,6 +18,17 @@ export interface Product {
   imgSide?: string;
   imgBack?: string;
   imgTop?: string;
+  // new fields from latest CSV
+  assuranceLayer?: string;
+  assuranceText?: string;
+  laggardLayer?: string;
+  laggardPromoText?: string;
+  imgVideo?: string;
+  staffNotes?: string;
+  searchKeywords?: string;
+  color?: string;
+  needsVerification?: string;
+  floorDisplay?: string;
 }
 
 export interface SolarProduct {

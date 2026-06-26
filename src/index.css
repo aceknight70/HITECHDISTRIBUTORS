@@ -78,11 +78,11 @@ input::placeholder {
 }
 
 .editorial-shadow {
-  box-shadow: 4px 4px 0px 0px rgba(17, 17, 17, 1);
+  box-shadow: 4px 4px 0px 0px rgba(26, 42, 74, 1);
 }
 
 .editorial-shadow-sm {
-  box-shadow: 2px 2px 0px 0px rgba(17, 17, 17, 1);
+  box-shadow: 2px 2px 0px 0px rgba(26, 42, 74, 1);
 }
 
 @keyframes marquee {
@@ -98,4 +98,27 @@ input::placeholder {
 
 .group:hover .pause-marquee {
   animation-play-state: paused;
+}
+
+/* Make all text bold */
+* {
+    font-weight: 600 !important;
+}
+
+[class*="font-bold"] {
+    font-weight: 700 !important;
+}
+
+[class*="font-black"] {
+    font-weight: 900 !important;
+}
+
+/* Make prices extra bold */
+.price {
+    font-weight: 800 !important;
+}
+
+/* Keep small text readable */
+small, .small-text {
+    font-weight: 500 !important;
 }

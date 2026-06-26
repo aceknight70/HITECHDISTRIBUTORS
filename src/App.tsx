@@ -132,8 +132,8 @@ interface CustomDeal {
 
 const Teleprompter = ({ text }: { text: string }) => {
   return (
-    <div className="bg-black text-white py-2 border-4 border-black mb-6 overflow-hidden flex items-center shadow-[4px_4px_0px_0px_rgba(17,17,17,1)] relative group select-none">
-      <span className="flex-shrink-0 z-10 bg-black pr-3 pl-4 flex items-center gap-2 font-black uppercase tracking-widest text-[10px]">
+    <div className="bg-[#1a2a4a] text-white py-2 border-4 border-[#1a2a4a] mb-6 overflow-hidden flex items-center shadow-[4px_4px_0px_0px_rgba(26,42,74,1)] relative group select-none">
+      <span className="flex-shrink-0 z-10 bg-[#1a2a4a] pr-3 pl-4 flex items-center gap-2 font-black uppercase tracking-widest text-[10px]">
         <span className="text-sm">📢</span> <span className="hidden sm:inline">NOTICE:</span>
       </span>
       <div className="flex-grow overflow-hidden relative">
@@ -145,9 +145,9 @@ const Teleprompter = ({ text }: { text: string }) => {
   );
 };
 
-const ProductCard = ({ p, onAdd, onView, index }: { p: Product; onAdd: (p: Product) => void; onView: (p: Product) => void; index: number; key?: any }) => {
+const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; onAdd: (p: Product) => void; onView: (p: Product) => void; index: number; displayPrice?: string; key?: any }) => {
   return (
-    <div className="bg-white border-2 border-black p-4 flex flex-col gap-3 relative group hover:shadow-[8px_8px_0px_0px_rgba(17,17,17,1)] transition-all">
+    <div className="bg-white border-2 border-[#1a2a4a] p-4 flex flex-col gap-3 relative group hover:shadow-[8px_8px_0px_0px_rgba(26,42,74,1)] transition-all">
       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">
         <span className="bg-slate-200 text-slate-800 px-2 py-0.5 rounded flex items-center gap-1 border border-slate-300">
           <span className="opacity-60 text-[8px]">No.</span> {p.displayOrder || index + 1}
@@ -170,46 +170,46 @@ const ProductCard = ({ p, onAdd, onView, index }: { p: Product; onAdd: (p: Produ
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        <span className="px-2 py-1 bg-black text-white text-[9px] font-bold uppercase tracking-wider">{p.brand || "HITECH"}</span>
-        <span className="px-2 py-1 bg-slate-200 border border-black text-black text-[9px] font-bold uppercase tracking-wider">{p.cat}</span>
+        <span className="px-2 py-1 bg-[#1a2a4a] text-white text-[9px] font-bold uppercase tracking-wider">{p.brand || "HITECH"}</span>
+        <span className="px-2 py-1 bg-slate-200 border border-[#1a2a4a] text-black text-[9px] font-bold uppercase tracking-wider">{p.cat}</span>
         <span className="px-2 py-1 bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-mono tracking-wider truncate max-w-[120px]">CODE: {p.pn || "—"}</span>
       </div>
 
-      <div className="border-t border-black pt-2">
+      <div className="border-t border-[#1a2a4a] pt-2">
         <p className="text-[11px] text-slate-800 leading-tight line-clamp-2 min-h-[30px]">{p.desc}</p>
       </div>
 
       {p.bullets && (
-        <div className="border-t border-black pt-2">
+        <div className="border-t border-[#1a2a4a] pt-2">
           <p className="text-[10px] text-slate-600 font-mono line-clamp-2">{p.bullets}</p>
         </div>
       )}
 
-      <div className="border-t border-black pt-2 flex items-start gap-1">
+      <div className="border-t border-[#1a2a4a] pt-2 flex items-start gap-1">
         <span className="text-xs">⚙️</span>
         <p className="text-[11px] font-serif italic text-slate-800 line-clamp-2">{p.sp}</p>
       </div>
 
-      <div className="border-t border-black pt-2 flex justify-between items-center">
-        <span className="text-sm font-bold font-mono text-black">{p.price !== "CALL" && !p.price.includes("₦") ? "₦" : ""}{p.price}</span>
+      <div className="border-t border-[#1a2a4a] pt-2 flex justify-between items-center">
+        <span className="price text-sm font-bold font-mono text-[#1a1a2e]">{p.price !== "CALL" && !p.price.includes("₦") ? "₦" : ""}{displayPrice || p.price}</span>
         {p.assurance && <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider flex items-center gap-1">⭐ {p.assurance}</span>}
       </div>
 
-      <div className="border-t border-black pt-2">
+      <div className="border-t border-[#1a2a4a] pt-2">
         <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider flex items-center gap-1">🟢 {p.stock || "In Stock"}</span>
       </div>
 
-      <div className="border-t border-black pt-2">
+      <div className="border-t border-[#1a2a4a] pt-2">
         <a href="#" className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1">👥 See what others think → Visit Website</a>
       </div>
 
-      <div className="border-t border-black pt-3 flex gap-2">
+      <div className="border-t border-[#1a2a4a] pt-3 flex gap-2">
         {p.price !== "CALL" && (
-          <button onClick={(e) => { e.stopPropagation(); onAdd(p); }} className="flex-1 py-2 bg-black hover:bg-slate-800 text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+          <button onClick={(e) => { e.stopPropagation(); onAdd(p); }} className="flex-1 py-2 bg-[#1a2a4a] hover:bg-slate-800 text-white text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
             🛒 ADD TO ORDER
           </button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); onView(p); }} className="flex-1 py-2 bg-white hover:bg-slate-100 border border-black text-black text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+        <button onClick={(e) => { e.stopPropagation(); onView(p); }} className="flex-1 py-2 bg-white hover:bg-slate-100 border border-[#1a2a4a] text-black text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
           🔍 VIEW DETAILS
         </button>
       </div>
@@ -416,7 +416,7 @@ const ProductDetailOverlay = ({
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex justify-center items-end"
+          className="fixed inset-0 z-50 bg-[#1a2a4a]/60 backdrop-blur-sm flex justify-center items-end"
           onClick={() => setSelectedProduct(null)}
         >
           <div className="w-full max-w-[430px] bg-[var(--dk2)] border-t border-slate-800 rounded-t-3xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
@@ -512,7 +512,7 @@ const ProductDetailOverlay = ({
                       setSaveStatus(null);
                     }}
                     placeholder="Price"
-                    className="text-xs font-mono font-bold text-[var(--yl)] flex-shrink-0 bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-24 text-right transition-colors pb-1"
+                    className="text-xs font-mono font-bold text-[#1a1a2e] flex-shrink-0 bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-24 text-right transition-colors pb-1"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -597,7 +597,11 @@ export default function App() {
   const [compareSearch1, setCompareSearch1] = useState("");
   const [compareSearch2, setCompareSearch2] = useState("");
   const [storefrontImage, setStorefrontImage] = useState<string>(() => {
-    return localStorage.getItem("ht_storefront_image") || "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
+    const local = localStorage.getItem("ht_storefront_image");
+    if (local && local !== "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80") {
+      return local;
+    }
+    return "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
   });
 
   const [uploadStatus, setUploadStatus] = useState<string>("");
@@ -644,7 +648,22 @@ export default function App() {
   // Dynamic Product lists with Preset application
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [solarProducts, setSolarProducts] = useState<SolarProduct[]>(initialSolarProducts);
-  const [currentPreset, setCurrentPreset] = useState<"DEFAULT" | "PROMO HIGH" | "SEASONAL DEALS" | "WORKBOOK DISPLAY" | "LAST IMPORTED SHEET">("DEFAULT");
+  type PresetType = "DEFAULT" | "PROMO HIGH" | "SEASONAL DEALS" | "WORKBOOK DISPLAY" | "LAST IMPORTED SHEET";
+  const [roomPresets, setRoomPresets] = useState<Record<string, PresetType>>(() => {
+    try {
+      const saved = localStorage.getItem("ht_room_presets");
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return { showroom: "DEFAULT", display: "DEFAULT", livesheet: "DEFAULT", deals: "DEFAULT", gallery: "DEFAULT", manager: "DEFAULT" };
+  });
+  const currentPreset = roomPresets[currentRoom] || "DEFAULT";
+  const setCurrentPreset = (preset: PresetType) => {
+    setRoomPresets(prev => {
+      const next = { ...prev, [currentRoom]: preset };
+      localStorage.setItem("ht_room_presets", JSON.stringify(next));
+      return next;
+    });
+  };
   
   const [customPresets, setCustomPresets] = useState<Record<string, string[]>>({});
   const [editingPreset, setEditingPreset] = useState<string | null>(null);
@@ -824,9 +843,6 @@ export default function App() {
     const localBankInfo = localStorage.getItem("ht_bank_info");
     if (localBankInfo) setBankInfo(localBankInfo);
 
-    const localPreset = localStorage.getItem("ht_preset");
-    if (localPreset) setCurrentPreset(localPreset as any);
-
     const localCustomPresets = localStorage.getItem("ht_custom_presets");
     if (localCustomPresets) {
       try {
@@ -914,40 +930,33 @@ export default function App() {
     let list: Product[] = [];
     
     if (customPresets[currentPreset]) {
-      const allPossible = [
-        ...products, 
-        ...DEFAULT_CSV_DATA.map((p, i) => ({
-          id: `def-${i}`,
-          pn: p.productCode || "—",
-          cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-          n: `${p.brand} ${p.category}`.trim(),
-          sp: p.specs,
-          price: p.price || "CALL",
-          desc: p.description || "Default Description",
-          bullets: (p as any).bullets,
-          stock: (p as any).stockStatus,
-          displayOrder: p.displayOrder,
-        }))
-      ];
-      
       const targetNumbers = customPresets[currentPreset];
-      list = allPossible.filter(p => {
-        let numStr = p.displayOrder ? String(p.displayOrder) : "";
-        if (!numStr) {
-           const idx = products.findIndex(x => x.id === p.id);
-           if (idx !== -1) numStr = String(idx + 1);
-        }
-        return targetNumbers.includes(numStr);
+      const productsMap = new Map<string, Product>();
+      
+      products.forEach((p, idx) => {
+         const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
+         productsMap.set(numStr, p);
       });
-      list.sort((a, b) => {
-         const getNum = (p: Product) => {
-           if (p.displayOrder) return String(p.displayOrder);
-           const idx = products.findIndex(x => x.id === p.id);
-           if (idx !== -1) return String(idx + 1);
-           return "";
-         };
-         return targetNumbers.indexOf(getNum(a)) - targetNumbers.indexOf(getNum(b));
+      
+      DEFAULT_CSV_DATA.forEach((p, i) => {
+         const numStr = String(p.displayOrder);
+         if (!productsMap.has(numStr)) {
+            productsMap.set(numStr, {
+               id: `def-${i}`,
+               pn: p.productCode || "—",
+               cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
+               n: `${p.brand} ${p.category}`.trim(),
+               sp: p.specs,
+               price: p.price || "CALL",
+               desc: p.description || "Default Description",
+               bullets: (p as any).bullets,
+               stock: (p as any).stockStatus,
+               displayOrder: p.displayOrder,
+            } as any);
+         }
       });
+      
+      list = targetNumbers.map(numStr => productsMap.get(numStr)).filter(Boolean) as Product[];
     } else {
       list = products;
       if (currentPreset === "DEFAULT") {
@@ -1409,6 +1418,40 @@ export default function App() {
   };
 
   // CSV Google Sheets sheet importer parser
+  const parseCsvRow = (text: string) => {
+    const rows: string[][] = [];
+    let inQuotes = false;
+    let currentWord = '';
+    let currentRow: string[] = [];
+    
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"') {
+        if (inQuotes && text[i+1] === '"') {
+          currentWord += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        currentRow.push(currentWord.trim());
+        currentWord = '';
+      } else if (char === '\n' && !inQuotes) {
+        currentRow.push(currentWord.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentWord = '';
+      } else {
+        currentWord += char;
+      }
+    }
+    if (currentWord || currentRow.length > 0) {
+      currentRow.push(currentWord.trim());
+      rows.push(currentRow);
+    }
+    return rows;
+  };
+
   const handleCsvImport = async () => {
     if (!csvText.trim()) {
       setCsvStatus("Please enter CSV sheet text.");
@@ -1416,30 +1459,54 @@ export default function App() {
     }
 
     try {
-      const rows = csvText.split("\n");
+      const rows = parseCsvRow(csvText);
       const importedProducts: Product[] = [];
       
-      rows.forEach((row, i) => {
-        if (i === 0 || !row.trim()) return; // skip header or empty rows
-        const cols = row.split(",");
+      rows.forEach((cols, i) => {
+        if (i === 0 || cols.length < 2) return; // skip header or empty rows
         
         // If the first column is a pure number or if the header has "No.", we assume shifted cols
-        const isShifted = !isNaN(Number(cols[0]?.trim())) || rows[0].toLowerCase().startsWith("no");
+        const isShifted = !isNaN(Number(cols[0]?.trim())) || rows[0][0]?.toLowerCase().startsWith("no");
         const offset = isShifted ? 1 : 0;
         const displayOrder = isShifted ? cols[0]?.trim() : String(i);
 
         if (cols.length >= 6 + offset) {
+          const rawCat = cols[2 + offset]?.trim().toLowerCase() || "laptops";
+          // determine a simpler category string for filtering
+          let mappedCat = "laptops";
+          if (rawCat.includes("printer") || rawCat.includes("copier")) mappedCat = "printers";
+          if (rawCat.includes("desktop") || rawCat.includes("all-in-one")) mappedCat = "desktops";
+          if (rawCat.includes("solar") || rawCat.includes("inverter") || rawCat.includes("battery") || rawCat.includes("ups") || rawCat.includes("stabilizer")) mappedCat = "solar";
+
           importedProducts.push({
             id: `csv-${displayOrder}`, // Unique ID for this row to allow merging
             displayOrder: displayOrder,
-            pn: cols[0 + offset]?.trim() || "—",
-            cat: cols[1 + offset]?.trim().toLowerCase() || "laptops",
-            n: cols[2 + offset]?.trim() || "Imported Product",
-            sp: cols[3 + offset]?.trim() || "Imported Specifications",
-            price: cols[4 + offset]?.trim() || "CALL",
-            desc: cols[5 + offset]?.trim() || "Imported from CSV Sheet",
-            promo: cols[6 + offset]?.trim().toLowerCase() === "true",
-            newp: cols[7 + offset]?.trim().toLowerCase() === "true"
+            brand: cols[0 + offset]?.trim() || "HITECH",
+            pn: cols[1 + offset]?.trim() || "—",
+            cat: mappedCat,
+            n: cols[2 + offset]?.trim() || "Imported Product", // Use the original category as product name/family
+            desc: cols[3 + offset]?.trim() || "Imported from CSV Sheet",
+            bullets: cols[4 + offset]?.trim() || "",
+            sp: cols[5 + offset]?.trim() || "Imported Specifications",
+            price: cols[6 + offset]?.trim() || "CALL",
+            assuranceLayer: cols[7 + offset]?.trim() || "No",
+            assuranceText: cols[8 + offset]?.trim() || "",
+            laggardLayer: cols[9 + offset]?.trim() || "No",
+            laggardPromoText: cols[10 + offset]?.trim() || "",
+            imgManual: cols[11 + offset]?.trim() || "",
+            imgFront: cols[12 + offset]?.trim() || "",
+            imgSide: cols[13 + offset]?.trim() || "",
+            imgBack: cols[14 + offset]?.trim() || "",
+            imgTop: cols[15 + offset]?.trim() || "",
+            imgVideo: cols[16 + offset]?.trim() || "",
+            stock: cols[17 + offset]?.trim() || "In Stock",
+            staffNotes: cols[18 + offset]?.trim() || "",
+            searchKeywords: cols[19 + offset]?.trim() || "",
+            color: cols[20 + offset]?.trim() || "",
+            needsVerification: cols[21 + offset]?.trim() || "No",
+            floorDisplay: cols[22 + offset]?.trim() || "No",
+            promo: cols[18 + offset]?.trim() === "PROMO", 
+            newp: cols[18 + offset]?.trim() === "NEW" 
           });
         }
       });
@@ -1448,6 +1515,7 @@ export default function App() {
         setCsvStatus(`Saving ${importedProducts.length} items to permanent storage...`);
         try {
            const batch = writeBatch(db);
+           // Firestore batch is limited to 500 writes, we only have ~155
            importedProducts.forEach(p => {
              const docRef = doc(db, "products", p.id);
              batch.set(docRef, p, { merge: true }); // MERGE to not overwrite existing photos
@@ -1462,7 +1530,7 @@ export default function App() {
            setCsvStatus("❌ Failed to save data. Please try again.");
         }
       } else {
-        setCsvStatus("Could not parse any valid rows. Ensure format is: No.,P/N,Category,Name,Spec,Price,Description,Promo,New");
+        setCsvStatus("Could not parse any valid rows. Ensure format matches the template.");
       }
     } catch (err: any) {
       setCsvStatus("Error parsing CSV: " + err.message);
@@ -1486,7 +1554,6 @@ export default function App() {
             key={preset.id}
             onClick={() => {
               setCurrentPreset(preset.id as any);
-              localStorage.setItem("ht_preset", preset.id);
             }}
             className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center relative ${currentPreset === preset.id ? "bg-slate-800 shadow-inner " + preset.border : "bg-slate-950 border-slate-800"}`}
           >
@@ -1514,7 +1581,7 @@ export default function App() {
         {editingPreset && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-[#1a2a4a]/80 flex items-center justify-center p-4 backdrop-blur-sm"
           >
             <motion.div 
               initial={{ y: 20, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, scale: 0.95 }}
@@ -1624,7 +1691,7 @@ export default function App() {
         <div className="flex flex-col justify-between flex-grow p-6 select-none bg-[var(--dk)]">
           
           <div className="pt-8">
-            <div className="flex justify-between items-center border-b-4 border-black pb-4 mb-6">
+            <div className="flex justify-between items-center border-b-4 border-[#1a2a4a] pb-4 mb-6">
               <div className="flex flex-col text-left">
                 <span className="text-[10px] font-bold tracking-[.4em] uppercase mb-1.5 opacity-60 font-sans">The Network Hub</span>
                 <HitechLogo size="lg" />
@@ -1663,7 +1730,7 @@ export default function App() {
               referrerPolicy="no-referrer"
               className="w-full h-[220px] object-cover object-center brightness-95 hover:brightness-100 transition-all duration-300"
               onError={() => {
-                const defaultFallback = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
+                const defaultFallback = "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
                 if (storefrontImage !== defaultFallback) {
                   setStorefrontImage(defaultFallback);
                 }
@@ -1681,7 +1748,7 @@ export default function App() {
           <div className="flex flex-col gap-4 pb-6">
             <div className="flex flex-wrap gap-1.5 justify-start py-2">
               {["Laptops", "Printers", "☀ Solar Hub", "Desktops", "CCTV", "Repairs"].map((tag, idx) => (
-                <span key={idx} className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 border border-black bg-white text-black">
+                <span key={idx} className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 border border-[#1a2a4a] bg-white text-black">
                   {tag}
                 </span>
               ))}
@@ -1690,7 +1757,7 @@ export default function App() {
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => { setInStore(true); setCurrentRoom("showroom"); }}
-              className="w-full py-4 bg-black text-white font-bold uppercase tracking-widest text-xs border-2 border-black hover:bg-white hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(17,17,17,1)] hover:shadow-none"
+              className="w-full py-4 bg-[#1a2a4a] text-white font-bold uppercase tracking-widest text-xs border-2 border-[#1a2a4a] hover:bg-white hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(26,42,74,1)] hover:shadow-none"
             >
               Enter Showroom →
             </motion.button>
@@ -1705,20 +1772,20 @@ export default function App() {
         <div className="flex flex-col flex-grow bg-[var(--dk)] pb-24">
           
           {/* 3.4 Topboard - Fixed top bar */}
-          <header className="sticky top-0 z-40 w-full bg-[var(--dk)]/95 backdrop-blur-md border-b-4 border-black py-3 px-4 flex justify-between items-center">
+          <header className="sticky top-0 z-40 w-full bg-[var(--dk)]/95 backdrop-blur-md border-b-4 border-[#1a2a4a] py-3 px-4 flex justify-between items-center">
             <div className="flex items-center gap-2">
-              <button onClick={() => setInStore(false)} className="p-1.5 border border-black bg-white text-black hover:bg-black hover:text-white transition-colors">
+              <button onClick={() => setInStore(false)} className="p-1.5 border border-[#1a2a4a] bg-white text-black hover:bg-[#1a2a4a] hover:text-white transition-colors">
                 <Home className="w-4 h-4" />
               </button>
               <HitechLogo size="sm" className="ml-1" />
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-mono uppercase tracking-wider bg-black text-white px-2.5 py-1 border border-black flex items-center gap-1">
+              <span className="text-[9px] font-mono uppercase tracking-wider bg-[#1a2a4a] text-white px-2.5 py-1 border border-[#1a2a4a] flex items-center gap-1">
                 <span>{currentRoom}</span>
               </span>
               {cart.length > 0 && (
-                <button onClick={() => setCurrentRoom("invoice")} className="relative p-1.5 border border-black bg-white text-black">
+                <button onClick={() => setCurrentRoom("invoice")} className="relative p-1.5 border border-[#1a2a4a] bg-white text-black">
                   <ShoppingCart className="w-4 h-4" />
                   <span className="absolute -top-1 -right-1 bg-red-700 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">
                     {cart.length}
@@ -1736,21 +1803,21 @@ export default function App() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <Teleprompter text="Welcome to the Showroom! Browse our full product catalogue by category. Select a category to view products, and click 'Add to Order' to start building your order." />
                 <PresetSelector />
-                <div className="mb-8 p-6 bg-[var(--dk)] border-4 border-black shadow-[8px_8px_0px_0px_rgba(17,17,17,1)]">
+                <div className="mb-8 p-6 bg-[var(--dk)] border-4 border-[#1a2a4a] shadow-[8px_8px_0px_0px_rgba(26,42,74,1)]">
                   <h3 className="text-black font-black uppercase text-2xl tracking-tighter mb-2 flex items-center gap-2">
                     <Building className="w-6 h-6" /> HiTech Distributors Hub
                   </h3>
                   <p className="text-sm font-mono text-slate-500 uppercase tracking-widest mb-4">{STORE.addr}</p>
-                  <div className="flex gap-3 items-center text-xs font-bold uppercase border-t-2 border-black pt-4">
-                    <span className={`w-3 h-3 border-2 border-black ${managerAvailable ? "bg-green-500" : "bg-red-500 animate-pulse"}`} />
+                  <div className="flex gap-3 items-center text-xs font-bold uppercase border-t-2 border-[#1a2a4a] pt-4">
+                    <span className={`w-3 h-3 border-2 border-[#1a2a4a] ${managerAvailable ? "bg-green-500" : "bg-red-500 animate-pulse"}`} />
                     <span className="text-black">{managerAvailable ? "Manager Available In-Store" : "Manager Busy / On-Site"}</span>
                   </div>
                 </div>
 
                 {!activeCategory ? (
                   <>
-                    <h4 className="text-[10px] font-bold uppercase tracking-[.3em] text-slate-400 mb-4 border-b-2 border-black pb-2">Browse Directory</h4>
-                    <div className="grid grid-cols-2 gap-px bg-black border-2 border-black mb-8">
+                    <h4 className="text-[10px] font-bold uppercase tracking-[.3em] text-slate-400 mb-4 border-b-2 border-[#1a2a4a] pb-2">Browse Directory</h4>
+                    <div className="grid grid-cols-2 gap-px bg-[#1a2a4a] border-2 border-[#1a2a4a] mb-8">
                       {CATEGORIES.map((cat, idx) => {
                         const count = displayedProducts.filter(p => p.cat === cat.id).length;
                         const indexStr = String(idx + 1).padStart(2, '0');
@@ -1786,7 +1853,7 @@ export default function App() {
                       {/* Special 11th Solar Hub tile */}
                       <button
                         onClick={() => setCurrentRoom("solar")}
-                        className="bg-[var(--dk)] p-5 flex flex-col justify-between hover:bg-black hover:text-white transition-all cursor-pointer group min-h-[140px] text-left col-span-2 border-t border-black"
+                        className="bg-[var(--dk)] p-5 flex flex-col justify-between hover:bg-[#1a2a4a] hover:text-white transition-all cursor-pointer group min-h-[140px] text-left col-span-2 border-t border-[#1a2a4a]"
                       >
                         <div className="flex justify-between items-start w-full">
                           <span className="text-3xl font-serif italic font-light opacity-80">11</span>
@@ -1803,7 +1870,7 @@ export default function App() {
                   </>
                 ) : (
                   <div>
-                    <div className="flex justify-between items-end mb-6 border-b-4 border-black pb-4">
+                    <div className="flex justify-between items-end mb-6 border-b-4 border-[#1a2a4a] pb-4">
                       <button onClick={() => setActiveCategory(null)} className="text-[10px] font-bold uppercase tracking-wider text-black flex items-center gap-2 hover:opacity-50">
                         <span className="text-lg">←</span> Back
                       </button>
@@ -1814,7 +1881,7 @@ export default function App() {
 
                     <div className="flex flex-col gap-4">
                       {displayedProducts.filter(p => p.cat === activeCategory).map((p, index) => (
-                        <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} />
+                        <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} displayPrice={getDisplayPrice(p)} />
                       ))}
                     </div>
                   </div>
@@ -1837,7 +1904,7 @@ export default function App() {
 
                 <div className="flex flex-col gap-4">
                   {displayedProducts.slice(0, 42).map((p, index) => (
-                    <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} />
+                    <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} displayPrice={getDisplayPrice(p)} />
                   ))}
                 </div>
               </motion.div>
@@ -1848,7 +1915,7 @@ export default function App() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
                 <Teleprompter text="Welcome to Hot Deals! Don't miss out on our best promotions and discounts. These products are available at special prices. Act fast — these deals won't last long!" />
                 <PresetSelector />
-                <div className="p-6 bg-black border-4 border-black mb-2 shadow-[8px_8px_0px_0px_rgba(17,17,17,1)]">
+                <div className="p-6 bg-[#1a2a4a] border-4 border-[#1a2a4a] mb-2 shadow-[8px_8px_0px_0px_rgba(26,42,74,1)]">
                   <h3 className="text-white font-black uppercase tracking-tighter text-2xl flex items-center gap-2 mb-2">
                     <Tag className="w-6 h-6 text-red-500" /> Active Flash Deals
                   </h3>
@@ -1857,7 +1924,7 @@ export default function App() {
 
                 <div className="flex flex-col gap-4">
                   {displayedProducts.filter(p => p.promo).map((p, index) => (
-                    <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} />
+                    <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} displayPrice={getDisplayPrice(p)} />
                   ))}
                 </div>
               </motion.div>
@@ -1891,7 +1958,7 @@ export default function App() {
                         <p className="font-bold text-xs text-slate-200 truncate">{p.n}</p>
                         <p className="text-[9px] text-[var(--mu)] truncate font-mono">{p.sp}</p>
                       </div>
-                      <div className="w-1/3 text-right font-mono font-bold text-[var(--yl)] text-xs">
+                      <div className="price w-1/3 text-right font-mono font-bold text-[#1a1a2e] text-xs">
                         {getDisplayPrice(p)}
                       </div>
                     </div>
@@ -1907,7 +1974,7 @@ export default function App() {
                         <p className="font-bold text-xs text-amber-100 truncate">{s.n}</p>
                         <p className="text-[9px] text-amber-500/80 truncate font-mono">{s.sp}</p>
                       </div>
-                      <div className="w-1/3 text-right font-mono font-bold text-amber-400 text-xs">
+                      <div className="price w-1/3 text-right font-mono font-bold text-[#1a1a2e] text-xs">
                         {getDisplayPrice(s)}
                       </div>
                     </div>
@@ -2002,7 +2069,7 @@ export default function App() {
                         ) : (
                           <Video className="w-8 h-8 text-slate-700 group-hover:scale-110 transition-transform" />
                         )}
-                        <span className="absolute bottom-1 right-1 text-[8px] bg-black/80 text-white px-1 rounded font-mono">{vid.duration}</span>
+                        <span className="absolute bottom-1 right-1 text-[8px] bg-[#1a2a4a]/80 text-white px-1 rounded font-mono">{vid.duration}</span>
                       </div>
                       <div className="p-2">
                         <h4 className="font-bold text-[10px] text-[var(--yl)] leading-tight mb-1 line-clamp-2">{vid.title}</h4>
@@ -2046,7 +2113,7 @@ export default function App() {
                         <div key={item.product.id} className="flex justify-between items-center border-b border-slate-800/50 pb-2">
                           <div className="min-w-0 pr-2">
                             <h4 className="font-bold text-xs text-slate-200 truncate">{item.product.n}</h4>
-                            <p className="text-[9px] text-[var(--mu)] font-mono">{getDisplayPrice(item.product)} x {item.quantity}</p>
+                            <p className="price text-[9px] text-[var(--mu)] font-mono">{getDisplayPrice(item.product)} x {item.quantity}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="flex items-center bg-slate-950 rounded border border-slate-800">
@@ -2060,7 +2127,7 @@ export default function App() {
                       ))}
                       <div className="flex justify-between items-center pt-2">
                         <span className="text-xs font-bold text-slate-400">Invoice Total:</span>
-                        <span className="text-sm font-bold font-mono text-[var(--yl)]">₦{calculateCartTotal().toLocaleString()}</span>
+                        <span className="price text-sm font-bold font-mono text-[#1a1a2e]">₦{calculateCartTotal().toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -2107,7 +2174,7 @@ export default function App() {
                           <p>Billed To: {customerName}</p>
                           <p>Phone: {customerPhone}</p>
                           <p>Date: {new Date().toLocaleDateString()}</p>
-                          <p className="border-t border-slate-800 my-1 pt-1 font-bold text-[var(--yl)]">Grand Total: ₦{calculateCartTotal().toLocaleString()}</p>
+                          <p className="price border-t border-slate-800 my-1 pt-1 font-bold text-[#1a1a2e]">Grand Total: ₦{calculateCartTotal().toLocaleString()}</p>
                         </div>
 
                         <div className="bg-[var(--dk2)] p-3 rounded-lg border border-slate-800 text-xs">
@@ -2411,37 +2478,37 @@ export default function App() {
             {currentRoom === "solar" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
                 <Teleprompter text="Welcome to the Solar Hub! Explore our advanced hybrid backup installations, battery banks, and solar panel arrays." />
-                <div className="p-6 bg-black border-4 border-black shadow-[8px_8px_0px_0px_rgba(17,17,17,1)]">
+                <div className="p-6 bg-[#1a2a4a] border-4 border-[#1a2a4a] shadow-[8px_8px_0px_0px_rgba(26,42,74,1)]">
                   <h3 className="text-white font-black text-2xl uppercase tracking-tighter flex items-center gap-2 mb-2">
                     <Sun className="w-6 h-6 text-amber-500" /> Solar Infrastructure
                   </h3>
                   <p className="text-xs font-mono uppercase tracking-widest text-slate-400">Configure hybrid backup installations, batteries, panels, and chargers.</p>
                 </div>
 
-                <div className="p-6 bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(17,17,17,1)]">
+                <div className="p-6 bg-white border-4 border-[#1a2a4a] shadow-[8px_8px_0px_0px_rgba(26,42,74,1)]">
                   <h4 className="font-black text-sm text-black uppercase tracking-widest mb-2 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-black" /> AI Sizing Engine
                   </h4>
                   <p className="text-[11px] font-serif italic text-slate-700 mb-6">Input your daily appliances and average running hours, and the AI Core will automatically compute your ideal inverter, battery, and solar panel array.</p>
 
-                  <div className="flex flex-col gap-3 bg-slate-100 p-4 border-2 border-black">
+                  <div className="flex flex-col gap-3 bg-slate-100 p-4 border-2 border-[#1a2a4a]">
                     {sizingAppliances.map(app => (
-                      <div key={app.id} className="flex justify-between items-center text-xs border-b border-dashed border-black pb-3 mb-1">
+                      <div key={app.id} className="flex justify-between items-center text-xs border-b border-dashed border-[#1a2a4a] pb-3 mb-1">
                         <div>
                           <p className="font-bold text-black uppercase">{app.name}</p>
                           <p className="text-[10px] text-slate-600 font-mono tracking-widest">{app.watts}W • {app.hours} hrs</p>
                         </div>
-                        <div className="flex items-center bg-white border-2 border-black font-bold">
-                          <button onClick={() => updateApplianceCount(app.id, -1)} className="p-1.5 text-black hover:bg-black hover:text-white transition-colors"><Minus className="w-3 h-3" /></button>
+                        <div className="flex items-center bg-white border-2 border-[#1a2a4a] font-bold">
+                          <button onClick={() => updateApplianceCount(app.id, -1)} className="p-1.5 text-black hover:bg-[#1a2a4a] hover:text-white transition-colors"><Minus className="w-3 h-3" /></button>
                           <span className="px-3 font-mono text-black">{app.count}</span>
-                          <button onClick={() => updateApplianceCount(app.id, 1)} className="p-1.5 text-black hover:bg-black hover:text-white transition-colors"><Plus className="w-3 h-3" /></button>
+                          <button onClick={() => updateApplianceCount(app.id, 1)} className="p-1.5 text-black hover:bg-[#1a2a4a] hover:text-white transition-colors"><Plus className="w-3 h-3" /></button>
                         </div>
                       </div>
                     ))}
                     <button
                       onClick={handleSizingRecommendation}
                       disabled={sizingLoading}
-                      className="w-full py-3 mt-4 bg-black hover:bg-white hover:text-black border-2 border-black text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                      className="w-full py-3 mt-4 bg-[#1a2a4a] hover:bg-white hover:text-black border-2 border-[#1a2a4a] text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                     >
                       {sizingLoading ? (
                         <>
@@ -2456,16 +2523,16 @@ export default function App() {
 
                 {sizingRecommendation && (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                              className="p-6 bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(17,17,17,1)] flex flex-col gap-4">
-                    <h4 className="font-black text-xs text-black uppercase tracking-widest border-b-4 border-black pb-2">Deployment Specifications</h4>
-                    <div className="text-xs font-mono text-black flex flex-col gap-2 bg-slate-100 border-2 border-black p-4">
+                              className="p-6 bg-white border-4 border-[#1a2a4a] shadow-[8px_8px_0px_0px_rgba(26,42,74,1)] flex flex-col gap-4">
+                    <h4 className="font-black text-xs text-black uppercase tracking-widest border-b-4 border-[#1a2a4a] pb-2">Deployment Specifications</h4>
+                    <div className="text-xs font-mono text-black flex flex-col gap-2 bg-slate-100 border-2 border-[#1a2a4a] p-4">
                       <p><strong className="uppercase">Total Daily Load:</strong> {sizingRecommendation.totalLoadWh} Wh</p>
-                      <div className="border-t border-dashed border-black my-2"></div>
+                      <div className="border-t border-dashed border-[#1a2a4a] my-2"></div>
                       <p className="text-black"><strong className="uppercase">Inverter Core:</strong> {sizingRecommendation.recommendedInverter?.name} ({sizingRecommendation.recommendedInverter?.price})</p>
                       <p className="text-black"><strong className="uppercase">Battery Storage:</strong> {sizingRecommendation.recommendedBattery?.name} ({sizingRecommendation.recommendedBattery?.price})</p>
                       <p className="text-black"><strong className="uppercase">Solar Array:</strong> {sizingRecommendation.recommendedPanels?.quantity}x {sizingRecommendation.recommendedPanels?.name} ({sizingRecommendation.recommendedPanels?.price} ea)</p>
                     </div>
-                    <div className="text-[11px] text-slate-800 leading-relaxed font-serif italic border-l-4 border-black pl-3 my-2">
+                    <div className="text-[11px] text-slate-800 leading-relaxed font-serif italic border-l-4 border-[#1a2a4a] pl-3 my-2">
                       <p><strong>System Note:</strong> {sizingRecommendation.reasoning}</p>
                     </div>
                     <button
@@ -2473,7 +2540,7 @@ export default function App() {
                         const message = `Hello, I ran the Solar Sizing tool. Recommended setup:\nInverter: ${sizingRecommendation.recommendedInverter?.name}\nBattery: ${sizingRecommendation.recommendedBattery?.name}\nPanels: ${sizingRecommendation.recommendedPanels?.quantity}x ${sizingRecommendation.recommendedPanels?.name}`;
                         window.open(`https://wa.me/${WA_SALES}?text=${encodeURIComponent(message)}`, "_blank");
                       }}
-                      className="w-full py-3 bg-black border-2 border-black text-white hover:bg-white hover:text-black font-bold uppercase tracking-widest text-xs transition-colors"
+                      className="w-full py-3 bg-[#1a2a4a] border-2 border-[#1a2a4a] text-white hover:bg-white hover:text-black font-bold uppercase tracking-widest text-xs transition-colors"
                     >
                       Transmit Order Directive
                     </button>
@@ -2766,24 +2833,64 @@ export default function App() {
                 {/* Data Table */}
                 <div className="bg-slate-900 rounded-xl border border-[var(--border)] overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse min-w-[500px]">
+                    <table className="w-full text-left border-collapse min-w-[2500px]">
                       <thead>
                         <tr className="bg-slate-950 border-b border-slate-800 text-[9px] uppercase tracking-wider text-[var(--mu)]">
-                          <th className="p-3 font-medium">ROW</th>
-                          <th className="p-3 font-medium">DISPLAY ORDER</th>
-                          <th className="p-3 font-medium">BRAND</th>
-                          <th className="p-3 font-medium">PRODUCT CODE</th>
-                          <th className="p-3 font-medium">ACTIONS</th>
+                          <th className="p-3 font-medium">No.</th>
+                          <th className="p-3 font-medium">Brand</th>
+                          <th className="p-3 font-medium">Product Code</th>
+                          <th className="p-3 font-medium">Category</th>
+                          <th className="p-3 font-medium">Description Headline</th>
+                          <th className="p-3 font-medium">Description Bullets</th>
+                          <th className="p-3 font-medium">Technical Specs</th>
+                          <th className="p-3 font-medium">Price</th>
+                          <th className="p-3 font-medium">Assurance Layer</th>
+                          <th className="p-3 font-medium">Assurance Text</th>
+                          <th className="p-3 font-medium">Laggard Layer</th>
+                          <th className="p-3 font-medium">Laggard Promo Text</th>
+                          <th className="p-3 font-medium">Image URL</th>
+                          <th className="p-3 font-medium">Front Image</th>
+                          <th className="p-3 font-medium">Side Image</th>
+                          <th className="p-3 font-medium">Back Image</th>
+                          <th className="p-3 font-medium">Top Image</th>
+                          <th className="p-3 font-medium">Video</th>
+                          <th className="p-3 font-medium">Stock Status</th>
+                          <th className="p-3 font-medium">Staff Notes</th>
+                          <th className="p-3 font-medium">Search Keywords</th>
+                          <th className="p-3 font-medium">Color/Variant</th>
+                          <th className="p-3 font-medium">Needs Verification</th>
+                          <th className="p-3 font-medium">Floor Display</th>
+                          <th className="p-3 font-medium sticky right-0 bg-slate-950">ACTIONS</th>
                         </tr>
                       </thead>
                       <tbody className="text-[10px] text-slate-300">
                         {products.filter(p => !sheetSearch || p.n.toLowerCase().includes(sheetSearch.toLowerCase()) || p.pn?.toLowerCase().includes(sheetSearch.toLowerCase())).map((p, index) => (
                           <tr key={p.id} onClick={() => setEditingProduct(p)} className="border-b border-slate-800/50 hover:bg-slate-800/30 group cursor-pointer">
-                            <td className="p-3 font-mono">{index + 1}</td>
-                            <td className="p-3 font-mono">{index + 1}</td>
-                            <td className="p-3 uppercase">{p.n.split(" ")[0]}</td>
+                            <td className="p-3 font-mono">{p.displayOrder || index + 1}</td>
+                            <td className="p-3">{p.brand}</td>
                             <td className="p-3 font-mono text-[var(--yl)]">{p.pn || "—"}</td>
-                            <td className="p-3 flex gap-2">
+                            <td className="p-3">{p.cat}</td>
+                            <td className="p-3 truncate max-w-[150px]">{p.desc}</td>
+                            <td className="p-3 truncate max-w-[150px]">{p.bullets}</td>
+                            <td className="p-3 truncate max-w-[150px]">{p.sp}</td>
+                            <td className="price p-3">{p.price}</td>
+                            <td className="p-3">{p.assuranceLayer}</td>
+                            <td className="p-3 truncate max-w-[100px]">{p.assuranceText}</td>
+                            <td className="p-3">{p.laggardLayer}</td>
+                            <td className="p-3 truncate max-w-[100px]">{p.laggardPromoText}</td>
+                            <td className="p-3 truncate max-w-[100px]">{p.imgManual}</td>
+                            <td className="p-3">{p.imgFront}</td>
+                            <td className="p-3">{p.imgSide}</td>
+                            <td className="p-3">{p.imgBack}</td>
+                            <td className="p-3">{p.imgTop}</td>
+                            <td className="p-3">{p.imgVideo}</td>
+                            <td className="p-3">{p.stock}</td>
+                            <td className="p-3 truncate max-w-[100px]">{p.staffNotes}</td>
+                            <td className="p-3 truncate max-w-[100px]">{p.searchKeywords}</td>
+                            <td className="p-3">{p.color}</td>
+                            <td className="p-3">{p.needsVerification}</td>
+                            <td className="p-3">{p.floorDisplay}</td>
+                            <td className="p-3 flex gap-2 sticky right-0 bg-slate-900 group-hover:bg-slate-800/80">
                               <button onClick={(e) => { e.stopPropagation(); setEditingProduct(p); }} className="p-1.5 bg-slate-800 rounded hover:bg-slate-700 text-blue-400" title="Edit Row">
                                 📝
                               </button>
@@ -2807,7 +2914,7 @@ export default function App() {
 
             {/* Modal for editing product */}
             {editingProduct && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a2a4a]/80 backdrop-blur-sm">
                 <div className="bg-slate-900 border border-[var(--border)] rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
                   <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
                     <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
@@ -2909,7 +3016,7 @@ export default function App() {
                         {["DEFAULT", "PROMO HIGH", "SEASONAL DEALS", "WORKBOOK DISPLAY", "LAST IMPORTED SHEET"].map(preset => (
                           <button
                             key={preset}
-                            onClick={() => { setCurrentPreset(preset as any); localStorage.setItem("ht_preset", preset); }}
+                            onClick={() => { setCurrentPreset(preset as any); }}
                             className={`py-2 px-3 text-xs text-left rounded-lg font-mono border ${currentPreset === preset ? "bg-[var(--yl)] text-slate-950 border-amber-500 font-bold" : "bg-slate-950 text-slate-400 border-slate-800"}`}
                           >
                             {preset}
@@ -2962,7 +3069,7 @@ export default function App() {
                           alt="Thumbnail" 
                           className="w-16 h-12 object-cover rounded border border-slate-800 bg-slate-900 shrink-0"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
+                            (e.target as HTMLImageElement).src = "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
                           }}
                         />
                         <div className="flex-grow flex flex-col gap-1">
@@ -3124,12 +3231,12 @@ export default function App() {
                       <div className="flex-1 border border-[#e8f0fe] p-2 text-center bg-white rounded">
                         <div className="text-[10px] text-[#555555] font-bold mb-1 uppercase">Select Product</div>
                         <div className="font-black text-xs text-[#1a3a6b]">HP 250 G9</div>
-                        <div className="text-xs font-mono text-[#1a1a2e]">₦400,000</div>
+                        <div className="price text-xs font-mono text-[#1a1a2e]">₦400,000</div>
                       </div>
                       <div className="flex-1 border border-[#e8f0fe] p-2 text-center bg-white rounded">
                         <div className="text-[10px] text-[#555555] font-bold mb-1 uppercase">Select Product</div>
                         <div className="font-black text-xs text-[#1a3a6b]">HP 250 G8</div>
-                        <div className="text-xs font-mono text-[#1a1a2e]">₦750,000</div>
+                        <div className="price text-xs font-mono text-[#1a1a2e]">₦750,000</div>
                       </div>
                     </div>
                     
@@ -3157,7 +3264,7 @@ export default function App() {
                         <div className="flex justify-between items-center border border-[#e8f0fe] p-2 bg-[#ffffff] rounded">
                           <div className="truncate pr-2">
                             <div className="text-xs font-black text-[#1a1a2e] truncate">{compareProduct1.n}</div>
-                            <div className="text-[10px] font-mono text-[#555555]">{compareProduct1.price}</div>
+                            <div className="price text-[10px] font-mono text-[#555555]">{compareProduct1.price}</div>
                           </div>
                           <button onClick={() => setCompareProduct1(null)} className="p-1 hover:bg-red-50 text-red-600 rounded flex-shrink-0 border border-transparent hover:border-red-200 transition-colors">
                             <X className="w-4 h-4" />
@@ -3185,7 +3292,7 @@ export default function App() {
                                   onMouseDown={(e) => { e.preventDefault(); setCompareProduct1(p); setCompareSearch1(""); setCompareSelectMode(null); }}
                                 >
                                   <span className="font-bold text-[#1a1a2e] truncate max-w-[70%]">{p.n}</span>
-                                  <span className="font-mono text-[10px] text-[#1a73e8]">{p.price}</span>
+                                  <span className="price font-mono text-[10px] text-[#1a73e8]">{p.price}</span>
                                 </div>
                               ))}
                             </div>
@@ -3203,7 +3310,7 @@ export default function App() {
                         <div className="flex justify-between items-center border border-[#e8f0fe] p-2 bg-[#ffffff] rounded">
                           <div className="truncate pr-2">
                             <div className="text-xs font-black text-[#1a1a2e] truncate">{compareProduct2.n}</div>
-                            <div className="text-[10px] font-mono text-[#555555]">{compareProduct2.price}</div>
+                            <div className="price text-[10px] font-mono text-[#555555]">{compareProduct2.price}</div>
                           </div>
                           <button onClick={() => setCompareProduct2(null)} className="p-1 hover:bg-red-50 text-red-600 rounded flex-shrink-0 border border-transparent hover:border-red-200 transition-colors">
                             <X className="w-4 h-4" />
@@ -3231,7 +3338,7 @@ export default function App() {
                                   onMouseDown={(e) => { e.preventDefault(); setCompareProduct2(p); setCompareSearch2(""); setCompareSelectMode(null); }}
                                 >
                                   <span className="font-bold text-[#1a1a2e] truncate max-w-[70%]">{p.n}</span>
-                                  <span className="font-mono text-[10px] text-[#1a73e8]">{p.price}</span>
+                                  <span className="price font-mono text-[10px] text-[#1a73e8]">{p.price}</span>
                                 </div>
                               ))}
                             </div>
@@ -3286,7 +3393,7 @@ export default function App() {
                           )}
                         </div>
                         <h4 className="font-black text-xs text-[#1a3a6b] leading-tight mb-1 min-h-[30px] line-clamp-2">{compareProduct1.n}</h4>
-                        <div className="text-sm font-mono font-bold text-[#1a1a2e] border-b border-[#e8f0fe] pb-2 mb-2">{compareProduct1.price}</div>
+                        <div className="price text-sm font-mono font-bold text-[#1a1a2e] border-b border-[#e8f0fe] pb-2 mb-2">{compareProduct1.price}</div>
                         
                         <div className="flex flex-col gap-2 text-[10px] font-mono flex-grow">
                           <div><span className="text-[#555555] font-sans font-bold uppercase text-[9px]">Brand:</span><br/><span className="text-[#1a1a2e]">{compareProduct1.n.split(" ")[0]}</span></div>
@@ -3312,7 +3419,7 @@ export default function App() {
                           )}
                         </div>
                         <h4 className="font-black text-xs text-[#1a3a6b] leading-tight mb-1 min-h-[30px] line-clamp-2">{compareProduct2.n}</h4>
-                        <div className="text-sm font-mono font-bold text-[#1a1a2e] border-b border-[#e8f0fe] pb-2 mb-2">{compareProduct2.price}</div>
+                        <div className="price text-sm font-mono font-bold text-[#1a1a2e] border-b border-[#e8f0fe] pb-2 mb-2">{compareProduct2.price}</div>
                         
                         <div className="flex flex-col gap-2 text-[10px] font-mono flex-grow">
                           <div><span className="text-[#555555] font-sans font-bold uppercase text-[9px]">Brand:</span><br/><span className="text-[#1a1a2e]">{compareProduct2.n.split(" ")[0]}</span></div>
@@ -3336,7 +3443,7 @@ export default function App() {
           </main>
 
           {/* 3.5 Bottom Navigation - Fixed bottom bar */}
-          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-black overflow-x-auto">
+          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-[#1a2a4a] overflow-x-auto">
             <div className="flex justify-between items-center px-2 py-1 max-w-[430px] mx-auto min-w-[430px]">
               {[
                 { id: "showroom", label: "Show", icon: <Building className="w-4 h-4" /> },
