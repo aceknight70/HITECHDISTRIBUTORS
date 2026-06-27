@@ -12,20 +12,26 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
     sm: {
       hi: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
       tech: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
+      d: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
       hub: "text-[11px] md:text-xs tracking-wider font-mono font-bold",
-      gap: "gap-1"
+      gap: "gap-1",
+      sub: "text-[7px] md:text-[8px] tracking-[0.2em] font-bold text-slate-400 mt-0.5 uppercase"
     },
     md: {
       hi: "px-2 py-1 rounded-md text-base font-black tracking-wide",
       tech: "px-2 py-1 rounded-md text-base font-black tracking-wide",
+      d: "px-2 py-1 rounded-md text-base font-black tracking-wide",
       hub: "text-sm tracking-widest font-mono font-bold",
-      gap: "gap-1.5"
+      gap: "gap-1.5",
+      sub: "text-[9px] md:text-[10px] tracking-[0.2em] font-bold text-slate-400 mt-1 uppercase"
     },
     lg: {
       hi: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
       tech: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
+      d: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
       hub: "text-xl md:text-2xl tracking-[0.15em] font-mono font-bold",
-      gap: "gap-2.5"
+      gap: "gap-2.5",
+      sub: "text-xs md:text-sm tracking-[0.2em] font-bold text-slate-400 mt-1.5 uppercase"
     }
   };
 
@@ -62,76 +68,111 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className={`inline-flex items-center select-none font-sans ${currentSize.gap} ${className}`}
+      className={`inline-flex flex-col select-none font-sans ${className}`}
     >
-      {/* HI */}
-      <motion.span
-        variants={itemVariants}
-        className={`${currentSize.hi} bg-[#dc3545] text-white shadow-[0_0_12px_rgba(220,53,69,0.35)]`}
-        whileHover={{ scale: 1.05, filter: "brightness(1.15)" }}
-        animate={{
-          boxShadow: [
-            "0 0 10px rgba(220,53,69,0.3)",
-            "0 0 18px rgba(220,53,69,0.6)",
-            "0 0 10px rgba(220,53,69,0.3)"
-          ]
-        }}
-        transition={{
-          boxShadow: {
-            duration: 2.2,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }
-        }}
-      >
-        HI
-      </motion.span>
-
-      {/* TECH */}
-      <motion.span
-        variants={itemVariants}
-        className={`${currentSize.tech} bg-[#1a73e8] text-white shadow-[0_0_12px_rgba(26,115,232,0.35)]`}
-        whileHover={{ scale: 1.05, filter: "brightness(1.15)" }}
-        animate={{
-          boxShadow: [
-            "0 0 10px rgba(26,115,232,0.3)",
-            "0 0 18px rgba(26,115,232,0.6)",
-            "0 0 10px rgba(26,115,232,0.3)"
-          ]
-        }}
-        transition={{
-          boxShadow: {
-            duration: 2.2,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 0.4
-          }
-        }}
-      >
-        TECH
-      </motion.span>
-
-      {/* HUB */}
-      <motion.span
-        variants={itemVariants}
-        className={`${currentSize.hub} text-[#0f172a] dark:text-white uppercase flex items-center gap-1.5`}
-        whileHover={{ letterSpacing: "0.2em" }}
-        transition={{ duration: 0.25 }}
-      >
-        HUB
+      <div className={`flex items-center ${currentSize.gap}`}>
+        {/* HI */}
         <motion.span
-          className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#10b981] inline-block shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+          variants={itemVariants}
+          className={`${currentSize.hi} bg-[#dc3545] text-white shadow-[0_0_12px_rgba(220,53,69,0.35)]`}
+          whileHover={{ scale: 1.05, filter: "brightness(1.15)" }}
           animate={{
-            scale: [1, 1.35, 1],
-            opacity: [0.7, 1, 0.7]
+            boxShadow: [
+              "0 0 10px rgba(220,53,69,0.3)",
+              "0 0 18px rgba(220,53,69,0.6)",
+              "0 0 10px rgba(220,53,69,0.3)"
+            ]
           }}
           transition={{
-            duration: 1.8,
-            repeat: Infinity,
-            ease: "easeInOut"
+            boxShadow: {
+              duration: 2.2,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }
           }}
-        />
+        >
+          HI
+        </motion.span>
+
+        {/* TECH */}
+        <motion.span
+          variants={itemVariants}
+          className={`${currentSize.tech} bg-[#1a73e8] text-white shadow-[0_0_12px_rgba(26,115,232,0.35)]`}
+          whileHover={{ scale: 1.05, filter: "brightness(1.15)" }}
+          animate={{
+            boxShadow: [
+              "0 0 10px rgba(26,115,232,0.3)",
+              "0 0 18px rgba(26,115,232,0.6)",
+              "0 0 10px rgba(26,115,232,0.3)"
+            ]
+          }}
+          transition={{
+            boxShadow: {
+              duration: 2.2,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 0.4
+            }
+          }}
+        >
+          TECH
+        </motion.span>
+
+        {/* D */}
+        <motion.span
+          variants={itemVariants}
+          className={`${currentSize.d} bg-[#28a745] text-white shadow-[0_0_12px_rgba(40,167,69,0.35)]`}
+          whileHover={{ scale: 1.05, filter: "brightness(1.15)" }}
+          animate={{
+            boxShadow: [
+              "0 0 10px rgba(40,167,69,0.3)",
+              "0 0 18px rgba(40,167,69,0.6)",
+              "0 0 10px rgba(40,167,69,0.3)"
+            ]
+          }}
+          transition={{
+            boxShadow: {
+              duration: 2.2,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 0.8
+            }
+          }}
+        >
+          D
+        </motion.span>
+
+        {/* HUB */}
+        <motion.span
+          variants={itemVariants}
+          className={`${currentSize.hub} text-[#ffffff] uppercase flex items-center gap-1.5`}
+          whileHover={{ letterSpacing: "0.2em" }}
+          transition={{ duration: 0.25 }}
+        >
+          HUB
+          <motion.span
+            className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#10b981] inline-block shadow-[0_0_8px_rgba(16,185,129,0.6)]"
+            animate={{
+              scale: [1, 1.35, 1],
+              opacity: [0.7, 1, 0.7]
+            }}
+            transition={{
+              duration: 1.8,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+        </motion.span>
+      </div>
+      
+      {/* FULL NAME */}
+      <motion.span 
+        variants={itemVariants}
+        className={currentSize.sub}
+      >
+        HiTech Distributors
       </motion.span>
     </motion.div>
   );
 };
+

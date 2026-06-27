@@ -113,6 +113,53 @@ input::placeholder {
     font-weight: 900 !important;
 }
 
+/* Faint/Grey text overrides */
+
+/* 1. Define pure text colors for dark backgrounds */
+.bg-slate-800, .bg-slate-900, .bg-slate-950, .bg-black, .bg-\[\#1a2a4a\], .bg-\[\#0a0f1c\], .bg-\[var\(--bl\)\], .bg-\[var\(--bl2\)\] {
+    color: #ffffff !important;
+}
+
+/* 2. Define pure text colors for light backgrounds */
+body, .bg-white, .bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-red-50, .bg-amber-50, .bg-blue-50, .bg-emerald-50, .bg-\[\#ffffff\], .bg-\[var\(--dk\)\], .bg-\[var\(--dk2\)\], .bg-\[var\(--dk3\)\] {
+    color: #1a1a2e !important;
+}
+
+/* 3. Strip faint/grey text colors so they dynamically inherit the pure background text color */
+[class*="text-slate-"],
+[class*="text-gray-"],
+[class*="text-\[\#555555\]"],
+[class*="text-\[var\(--mu\)\]"],
+[class*="text-\[var\(--cr\)\]"],
+[class*="text-\[\#1a1a2e\]"],
+[class*="text-\[\#0f172a\]"],
+[class*="text-black\/"],
+[class*="text-white\/"] {
+    color: inherit !important;
+}
+
+/* 4. Restore intended colored text */
+[class*="text-red-"] { color: #ef4444 !important; }
+[class*="text-amber-"] { color: #f59e0b !important; }
+[class*="text-emerald-"] { color: #10b981 !important; }
+[class*="text-green-"] { color: #22c55e !important; }
+[class*="text-blue-"] { color: #3b82f6 !important; }
+[class*="text-\[var\(--yl\)\]"] { color: var(--yl) !important; }
+[class*="text-\[var\(--gr\)\]"] { color: var(--gr) !important; }
+[class*="text-purple-"] { color: #a855f7 !important; }
+[class*="text-[#1a3a6b]"], .text-\[\#1a3a6b\] { color: #1a3a6b !important; }
+[class*="text-[#1a73e8]"], .text-\[\#1a73e8\] { color: #1a73e8 !important; }
+[class*="text-[#e8f0fe]"], .text-\[\#e8f0fe\] { color: #e8f0fe !important; }
+
+/* 5. Force text white or black if color inherit fails on specific elements */
+.text-white { color: #ffffff !important; }
+.text-black { color: #000000 !important; }
+
+/* 6. Ensure inputs on light backgrounds have black text, and inputs on dark backgrounds have white text */
+input, textarea, select {
+    color: inherit !important;
+}
+
 /* Make prices extra bold */
 .price {
     font-weight: 800 !important;

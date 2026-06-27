@@ -48,11 +48,17 @@ import {
   Loader2,
   Settings,
   Save,
-  GitCompare
+  GitCompare,
+  Facebook,
+  Instagram,
+  Globe,
+  Download,
+  MessageCircle,
+  GraduationCap
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db, auth, ensureAuth, OperationType, handleFirestoreError } from "./lib/firebase";
-import { collection, addDoc, getDocs, onSnapshot, updateDoc, doc, setDoc, query, orderBy, limit, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, onSnapshot, updateDoc, deleteDoc, doc, setDoc, query, orderBy, limit, writeBatch } from "firebase/firestore";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
 import { GalleryCard } from "./components/GalleryCard";
@@ -79,15 +85,15 @@ interface CartItem {
 
 interface RepairSubmission {
   id: string;
-  type: string;
-  brand: string;
-  problem: string;
   name: string;
   phone: string;
+  email?: string;
+  productName: string;
+  modelSerial: string;
+  problem: string;
+  method: string;
   ref: string;
-  status: "Received" | "Diagnosed" | "Sent Away" | "In Repair" | "Returned" | "Ready for Pickup";
-  aiComplexity?: string;
-  aiCategory?: string;
+  status: "Received" | "Under Review" | "Being Repaired" | "Ready for Collection" | "Collected";
   submittedAt: string;
 }
 
@@ -175,6 +181,10 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
         <span className="px-2 py-1 bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-mono tracking-wider truncate max-w-[120px]">CODE: {p.pn || "—"}</span>
       </div>
 
+      <div className="pt-1 pb-1">
+        <h3 className="font-bold text-sm text-[#1a1a2e] leading-tight">{p.n}</h3>
+      </div>
+
       <div className="border-t border-[#1a2a4a] pt-2">
         <p className="text-[11px] text-slate-800 leading-tight line-clamp-2 min-h-[30px]">{p.desc}</p>
       </div>
@@ -199,8 +209,8 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
         <span className="text-[10px] text-green-600 font-bold uppercase tracking-wider flex items-center gap-1">🟢 {p.stock || "In Stock"}</span>
       </div>
 
-      <div className="border-t border-[#1a2a4a] pt-2">
-        <a href="#" className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1">👥 See what others think → Visit Website</a>
+      <div className="border-t border-[#1a2a4a] pt-2 bg-[#1a2a4a] p-2 mt-2 -mx-4">
+        <a href="#" className="text-[10px] text-white font-bold hover:underline flex items-center gap-1">👥 See what others think → Visit Website</a>
       </div>
 
       <div className="border-t border-[#1a2a4a] pt-3 flex gap-2">
@@ -561,9 +571,9 @@ const ProductDetailOverlay = ({
                     const text = `Hello HiTech, I would like to make an enquiry about: ${selectedProduct.n} (Price: ${getDisplayPrice(selectedProduct)})`;
                     window.open(`https://wa.me/${WA_SALES}?text=${encodeURIComponent(text)}`, "_blank");
                   }}
-                  className="flex-1 py-3 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider bg-slate-900 hover:bg-slate-800"
+                  className="flex-1 py-3 bg-[#25D366] hover:bg-[#1da851] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg"
                 >
-                  WhatsApp
+                  <MessageCircle className="w-4 h-4" /> WhatsApp
                 </button>
                 {selectedProduct.price !== "CALL" && (
                   <button
@@ -581,6 +591,93 @@ const ProductDetailOverlay = ({
     </AnimatePresence>
   );
 };
+
+const MOCKUP_GALLERY_IMAGES = [
+  {
+    category: "Laptops",
+    title: "HP Laptop Models",
+    description: "HP 250, HP 240, HP Pavilion, HP Envy (front, side, back, top views)",
+    img: "https://images.unsplash.com/photo-1593642632823-8f785ba67e45?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Desktops",
+    title: "HP Desktops",
+    description: "HP All-in-One, HP ProDesk (front, side, back views)",
+    img: "https://images.unsplash.com/photo-1593640495253-23196b27a87f?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Printers",
+    title: "HP Printers",
+    description: "HP LaserJet, HP Smart Tank, HP DeskJet (front, side views; size reference)",
+    img: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Monitors",
+    title: "HP Monitors",
+    description: "HP monitors (front and side views)",
+    img: "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Solar",
+    title: "Solar Solutions",
+    description: "Solar panels, inverters, batteries, charge controllers (full product view, installation reference)",
+    img: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "UPS/Inverters",
+    title: "Power Backup",
+    description: "Bluegate, Evergood (front view, size reference)",
+    img: "https://images.unsplash.com/photo-1585246231149-bc91a43a0889?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "CCTV",
+    title: "Surveillance",
+    description: "Cameras, DVRs, cables (front and side views)",
+    img: "https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Cameras",
+    title: "Digital Cameras",
+    description: "Digital cameras, webcams (front, side, and lens views)",
+    img: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Accessories",
+    title: "Tech Accessories",
+    description: "Flash drives, cables, adapters (close-up, size reference)",
+    img: "https://images.unsplash.com/photo-1621259182978-fbf93132d53d?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Inks/Toners",
+    title: "Inks & Toners",
+    description: "HP ink cartridges, toners (packaging, label view)",
+    img: "https://images.unsplash.com/photo-1587614295999-6c1c13675117?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Phones",
+    title: "Mobile Phones",
+    description: "Various mobile phones (front and side views)",
+    img: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Tablets",
+    title: "Tablets",
+    description: "Various tablets (front and side views)",
+    img: "https://images.unsplash.com/photo-1544228428-c9fc2c4b8b6a?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Networking",
+    title: "Networking Gear",
+    description: "Routers, switches, cables, access points (front and port views)",
+    img: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&q=80",
+  },
+  {
+    category: "Repairs/Services",
+    title: "Professional Repairs",
+    description: "People servicing computers, cameras, printers (professional repair/workshop images)",
+    img: "https://images.unsplash.com/photo-1581092921461-eab62e97a780?auto=format&fit=crop&w=800&q=80",
+  }
+];
 
 export default function App() {
   // App navigation state
@@ -631,6 +728,11 @@ export default function App() {
       if (data.success && data.url) {
         setStorefrontImage(data.url);
         localStorage.setItem("ht_storefront_image", data.url);
+        try {
+          await setDoc(doc(db, "settings", "global"), { storefrontImage: data.url }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Could not sync storefront photo to Firestore:", dbErr);
+        }
         setUploadStatus("Upload successful! Applied to starting page.");
       } else {
         throw new Error(data.error || "Failed to parse upload response.");
@@ -657,15 +759,20 @@ export default function App() {
     return { showroom: "DEFAULT", display: "DEFAULT", livesheet: "DEFAULT", deals: "DEFAULT", gallery: "DEFAULT", manager: "DEFAULT" };
   });
   const currentPreset = roomPresets[currentRoom] || "DEFAULT";
-  const setCurrentPreset = (preset: PresetType) => {
-    setRoomPresets(prev => {
-      const next = { ...prev, [currentRoom]: preset };
-      localStorage.setItem("ht_room_presets", JSON.stringify(next));
-      return next;
-    });
+  const setCurrentPreset = async (preset: PresetType) => {
+    const next = { ...roomPresets, [currentRoom]: preset };
+    setRoomPresets(next);
+    localStorage.setItem("ht_room_presets", JSON.stringify(next));
+    try {
+      await setDoc(doc(db, "settings", "room_presets"), next, { merge: true });
+    } catch (e) {
+      console.warn("Failed to sync room presets:", e);
+    }
   };
   
   const [customPresets, setCustomPresets] = useState<Record<string, string[]>>({});
+  const [displayFloorMode, setDisplayFloorMode] = useState<"DEFAULT" | "DEFAULT_PLUS" | "CUSTOM" | "ALL">("DEFAULT");
+  const [displayFloorSelection, setDisplayFloorSelection] = useState<string[]>([]);
   const [editingPreset, setEditingPreset] = useState<string | null>(null);
   const [editingNumbers, setEditingNumbers] = useState<string[]>([]);
   const [newNumbersInput, setNewNumbersInput] = useState<string>("");
@@ -740,6 +847,11 @@ export default function App() {
     { id: "f2", name: "Chinedu O.", rating: 4, comment: "Helpful assistant and clean showroom. The choice inverter works great for my office.", timestamp: new Date(Date.now() - 86400000 * 5).toISOString() }
   ]);
   const [pickups, setPickups] = useState<PickupSlot[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [receipts, setReceipts] = useState<any[]>([]);
+  const [escalations, setEscalations] = useState<any[]>([]);
+  const [schoolApplications, setSchoolApplications] = useState<any[]>([]);
+  const [staffActionStatus, setStaffActionStatus] = useState<string | null>(null);
   const [customDeals, setCustomDeals] = useState<CustomDeal[]>([
     { id: "d1", title: "HP Laser MFP 107w", desc: "Laser, Wireless, Compact, Fast print", oldPrice: "₦330,000", newPrice: "₦250,000", badge: "SPECIAL PROMO" },
     { id: "d2", title: "HP Pavilion 13 Core i3", desc: "Core i3-1115G4, 8GB, 256GB SSD, Silver", oldPrice: "₦780,000", newPrice: "₦650,000", badge: "PROMO LAPTOP" },
@@ -750,11 +862,28 @@ export default function App() {
   const [managerAvailable, setManagerAvailable] = useState(true);
   const [bankInfo, setBankInfo] = useState("Zenith Bank • HiTech Distributors • 1012345678");
 
+  // Receipt Form State
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const [rcpCustomerName, setRcpCustomerName] = useState("");
+  const [rcpCustomerPhone, setRcpCustomerPhone] = useState("");
+  const [rcpCustomerEmail, setRcpCustomerEmail] = useState("");
+  const [rcpInvoiceNum, setRcpInvoiceNum] = useState("");
+  const [rcpAmount, setRcpAmount] = useState("");
+  const [rcpMethod, setRcpMethod] = useState("Bank Transfer");
+  const [rcpDate, setRcpDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [rcpRef, setRcpRef] = useState("");
+  const [rcpPaidFor, setRcpPaidFor] = useState("");
+  const [rcpBalance, setRcpBalance] = useState("0");
+  const [rcpIssuedBy, setRcpIssuedBy] = useState("Lucy");
+  const [showReceipt, setShowReceipt] = useState(false);
+
   // Cart/Invoicing state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [invoiceStatus, setInvoiceStatus] = useState<"draft" | "generated" | "paid">("draft");
+  const [invoiceId, setInvoiceId] = useState("");
   const [paymentReceipt, setPaymentReceipt] = useState<string | null>(null);
 
   // Interactive Sizing state
@@ -767,14 +896,17 @@ export default function App() {
   const [sizingLoading, setSizingLoading] = useState(false);
 
   // Diagnostics Desk state
-  const [repairDeviceType, setRepairDeviceType] = useState("Laptop");
-  const [repairBrandModel, setRepairBrandModel] = useState("");
-  const [repairProblem, setRepairProblem] = useState("");
   const [repairCustName, setRepairCustName] = useState("");
   const [repairCustPhone, setRepairCustPhone] = useState("");
+  const [repairCustEmail, setRepairCustEmail] = useState("");
+  const [repairProductName, setRepairProductName] = useState("");
+  const [repairModelSerial, setRepairModelSerial] = useState("");
+  const [repairProblem, setRepairProblem] = useState("");
+  const [repairMethod, setRepairMethod] = useState("In-Store");
   const [submittingRepair, setSubmittingRepair] = useState(false);
+  const [repairSuccess, setRepairSuccess] = useState<string | null>(null);
   const [trackRef, setTrackRef] = useState("");
-  const [trackResult, setTrackResult] = useState<RepairSubmission | null>(null);
+  const [trackResult, setTrackResult] = useState<any | null>(null);
   const [trackError, setTrackError] = useState("");
 
   // AI Support / Info Booth chat state
@@ -804,6 +936,27 @@ export default function App() {
   const [pickupPhone, setPickupPhone] = useState("");
   const [pickupItems, setPickupItems] = useState("");
   const [pickupBooked, setPickupBooked] = useState(false);
+
+  // Escalation request state
+  const [escName, setEscName] = useState("");
+  const [escPhone, setEscPhone] = useState("");
+  const [escEmail, setEscEmail] = useState("");
+  const [escRef, setEscRef] = useState("");
+  const [escDesc, setEscDesc] = useState("");
+  const [escUrgency, setEscUrgency] = useState("Medium");
+  const [showEscalationForm, setShowEscalationForm] = useState(false);
+  const [escSuccess, setEscSuccess] = useState<string | null>(null);
+  const [submittingEsc, setSubmittingEsc] = useState(false);
+
+  // Shadow School application form state
+  const [schName, setSchName] = useState("");
+  const [schPhone, setSchPhone] = useState("");
+  const [schEmail, setSchEmail] = useState("");
+  const [schAge, setSchAge] = useState("");
+  const [schProgram, setSchProgram] = useState("Computer Repairs");
+  const [schReason, setSchReason] = useState("");
+  const [submittingSch, setSubmittingSch] = useState(false);
+  const [schSuccess, setSchSuccess] = useState<string | null>(null);
 
   // Staff Room state
   const [staffPIN, setStaffPIN] = useState("");
@@ -916,6 +1069,83 @@ export default function App() {
           setCustomPresets(docSnap.data() as Record<string, string[]>);
         }
       }, (e) => console.log("presets snapshot error:", e));
+
+      onSnapshot(doc(db, "settings", "global"), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data?.storefrontImage) {
+            setStorefrontImage(data.storefrontImage);
+          }
+          if (data?.bankInfo) {
+            setBankInfo(data.bankInfo);
+          }
+          if (data?.managerAvailable !== undefined) {
+            setManagerAvailable(data.managerAvailable);
+          }
+        }
+      }, (e) => console.log("global settings snapshot error:", e));
+
+      onSnapshot(collection(db, "orders"), (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setOrders(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
+      }, (e) => console.log("orders snapshot error:", e));
+
+      onSnapshot(collection(db, "receipts"), (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setReceipts(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
+      }, (e) => console.log("receipts snapshot error:", e));
+
+      onSnapshot(collection(db, "escalations"), (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setEscalations(list.sort((a,b) => b.timestamp - a.timestamp));
+      }, (e) => console.log("escalations snapshot error:", e));
+
+      onSnapshot(collection(db, "shadow_school_applications"), (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        setSchoolApplications(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
+      }, (e) => console.log("school applications snapshot error:", e));
+
+      onSnapshot(collection(db, "gallery_images"), (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() });
+        });
+        if (snapshot.size > 0) {
+          const sortedList = list.sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+          const defaults = [
+            { title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
+            { title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
+            { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
+          ];
+          setGalleryImages([...sortedList, ...defaults]);
+        }
+      }, (e) => console.log("gallery_images snapshot error:", e));
+
+      onSnapshot(doc(db, "settings", "room_presets"), (docSnap) => {
+        if (docSnap.exists()) {
+          setRoomPresets(docSnap.data() as Record<string, PresetType>);
+        }
+      }, (e) => console.log("room_presets snapshot error:", e));
+
+      onSnapshot(doc(db, "settings", "display_floor_config"), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.mode) setDisplayFloorMode(data.mode);
+          if (data.selection) setDisplayFloorSelection(data.selection);
+        }
+      }, (e) => console.log("display_floor_config snapshot error:", e));
     } catch (err) {
       console.warn("Firestore listener initialization skipped (offline/unconfigured fallback).");
     }
@@ -929,15 +1159,13 @@ export default function App() {
   const displayedProducts = React.useMemo(() => {
     let list: Product[] = [];
     
-    if (customPresets[currentPreset]) {
-      const targetNumbers = customPresets[currentPreset];
+    // For Display Floor, we ignore `currentPreset` and use `displayFloorMode`
+    if (currentRoom === "display") {
       const productsMap = new Map<string, Product>();
-      
       products.forEach((p, idx) => {
          const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
          productsMap.set(numStr, p);
       });
-      
       DEFAULT_CSV_DATA.forEach((p, i) => {
          const numStr = String(p.displayOrder);
          if (!productsMap.has(numStr)) {
@@ -955,27 +1183,76 @@ export default function App() {
             } as any);
          }
       });
+
+      let targetNumbers = new Set<string>();
       
-      list = targetNumbers.map(numStr => productsMap.get(numStr)).filter(Boolean) as Product[];
+      const defaultRows = Array.from({ length: 25 }, (_, i) => String(131 + i)); // 131 to 155
+      const allRows = Array.from({ length: 155 }, (_, i) => String(1 + i)); // 1 to 155
+      
+      if (displayFloorMode === "DEFAULT") {
+        defaultRows.forEach(r => targetNumbers.add(r));
+      } else if (displayFloorMode === "DEFAULT_PLUS") {
+        defaultRows.forEach(r => targetNumbers.add(r));
+        displayFloorSelection.forEach(r => targetNumbers.add(r));
+      } else if (displayFloorMode === "CUSTOM") {
+        displayFloorSelection.forEach(r => targetNumbers.add(r));
+      } else if (displayFloorMode === "ALL") {
+        allRows.forEach(r => targetNumbers.add(r));
+      }
+
+      list = Array.from(targetNumbers).map(numStr => productsMap.get(numStr)).filter(Boolean) as Product[];
+      
+      // Apply sorting by displayOrder to maintain sequence
+      list.sort((a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0));
     } else {
-      list = products;
-      if (currentPreset === "DEFAULT") {
-        list = DEFAULT_CSV_DATA.map((p, i) => ({
-          id: `def-${i}`,
-          pn: p.productCode || "—",
-          cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-          n: `${p.brand} ${p.category}`.trim(),
-          sp: p.specs,
-          price: p.price || "CALL",
-          desc: p.description || "Default Description",
-          bullets: (p as any).bullets,
-          stock: (p as any).stockStatus,
-          displayOrder: p.displayOrder,
-        }));
-      } else if (currentPreset === "PROMO HIGH") list = list.filter(p => p.promo);
-      else if (currentPreset === "SEASONAL DEALS") list = list.filter(p => p.newp || p.cat === "laptops");
-      else if (currentPreset === "LAST IMPORTED SHEET") list = list.filter(p => p.id && (p.id.startsWith("imp-") || p.id.startsWith("csv-")));
-      else if (currentPreset === "WORKBOOK DISPLAY") list = list.filter(p => p.id && !(p.id.startsWith("imp-") || p.id.startsWith("csv-")));
+      if (customPresets[currentPreset]) {
+        const targetNumbers = customPresets[currentPreset];
+        const productsMap = new Map<string, Product>();
+        
+        products.forEach((p, idx) => {
+           const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
+           productsMap.set(numStr, p);
+        });
+        
+        DEFAULT_CSV_DATA.forEach((p, i) => {
+           const numStr = String(p.displayOrder);
+           if (!productsMap.has(numStr)) {
+              productsMap.set(numStr, {
+                 id: `def-${i}`,
+                 pn: p.productCode || "—",
+                 cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
+                 n: `${p.brand} ${p.category}`.trim(),
+                 sp: p.specs,
+                 price: p.price || "CALL",
+                 desc: p.description || "Default Description",
+                 bullets: (p as any).bullets,
+                 stock: (p as any).stockStatus,
+                 displayOrder: p.displayOrder,
+              } as any);
+           }
+        });
+        
+        list = targetNumbers.map(numStr => productsMap.get(numStr)).filter(Boolean) as Product[];
+      } else {
+        list = products;
+        if (currentPreset === "DEFAULT") {
+          list = DEFAULT_CSV_DATA.map((p, i) => ({
+            id: `def-${i}`,
+            pn: p.productCode || "—",
+            cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
+            n: `${p.brand} ${p.category}`.trim(),
+            sp: p.specs,
+            price: p.price || "CALL",
+            desc: p.description || "Default Description",
+            bullets: (p as any).bullets,
+            stock: (p as any).stockStatus,
+            displayOrder: p.displayOrder,
+          }));
+        } else if (currentPreset === "PROMO HIGH") list = list.filter(p => p.promo);
+        else if (currentPreset === "SEASONAL DEALS") list = list.filter(p => p.newp || p.cat === "laptops");
+        else if (currentPreset === "LAST IMPORTED SHEET") list = list.filter(p => p.id && (p.id.startsWith("imp-") || p.id.startsWith("csv-")));
+        else if (currentPreset === "WORKBOOK DISPLAY") list = list.filter(p => p.id && !(p.id.startsWith("imp-") || p.id.startsWith("csv-")));
+      }
     }
 
     // Apply Firestore overrides
@@ -987,7 +1264,7 @@ export default function App() {
     });
 
     return list;
-  }, [products, currentPreset, productOverrides, customPresets]);
+  }, [products, currentPreset, productOverrides, customPresets, currentRoom, displayFloorMode, displayFloorSelection]);
 
 
   const displayedSolarProducts = React.useMemo(() => {
@@ -1103,21 +1380,39 @@ export default function App() {
     }, 0);
   };
 
-  // Submit Invoice to Firestore / Local Storage
-  const submitInvoiceOrder = async () => {
-    if (!customerName || !customerPhone) {
-      alert("Please enter customer name and phone.");
+  // Generate Invoice (FATAP-CT Style)
+  const handleGenerateInvoice = async () => {
+    if (!customerName || !customerPhone || cart.length === 0) {
+      alert("Please enter your name and phone, and ensure the cart is not empty.");
       return;
     }
 
+    const today = new Date();
+    const dateStr = `${String(today.getDate()).padStart(2, '0')}-${String(today.getMonth() + 1).padStart(2, '0')}-${today.getFullYear()}`;
+    const seq = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const newInvoiceId = `INV-${dateStr}-[${seq}]`;
+    setInvoiceId(newInvoiceId);
+    
+    const totalAmount = calculateCartTotal();
+    
+    let cartItemsText = "";
+    cart.map(item => {
+      const priceStr = getDisplayPrice(item.product);
+      let priceNum = 0;
+      if (priceStr !== "CALL") {
+        priceNum = parseInt(priceStr.replace(/[^\d]/g, ""), 10);
+      }
+      cartItemsText += `• ${item.product.n} (${item.quantity}) - ₦${(priceNum * item.quantity).toLocaleString()}\n`;
+    });
+
     const orderRecord = {
-      id: "ORD-" + Date.now().toString().slice(-6),
+      id: newInvoiceId,
       customerName,
       phone: customerPhone,
+      email: customerEmail,
       items: JSON.stringify(cart.map(item => ({ id: item.product.id, name: item.product.n, quantity: item.quantity, price: getDisplayPrice(item.product) }))),
-      total: calculateCartTotal(),
-      paid: invoiceStatus === "paid" || !!paymentReceipt,
-      receiptUrl: paymentReceipt || "",
+      total: totalAmount,
+      paid: false,
       timestamp: new Date().toISOString(),
       status: "Pending Payment" as any,
     };
@@ -1130,56 +1425,54 @@ export default function App() {
       localStorage.setItem("ht_orders", JSON.stringify([orderRecord, ...localOrders]));
     }
 
-    // Launch WhatsApp
-    const orderText = `Hi HiTech Distributors, I have created an invoice for my order (ID: ${orderRecord.id}).\nCustomer: ${customerName} (${customerPhone})\nTotal: ₦${orderRecord.total.toLocaleString()}\nThank you!`;
-    const waLink = `https://wa.me/${WA_SALES}?text=${encodeURIComponent(orderText)}`;
-    window.open(waLink, "_blank");
+    const waText = `📋 New Invoice #${newInvoiceId} from ${customerName}
+Total: ₦${totalAmount.toLocaleString()}
 
-    setInvoiceStatus("paid");
+Customer: ${customerName}
+Phone: ${customerPhone}
+Email: ${customerEmail || "N/A"}
+
+Items:
+${cartItemsText}
+Total: ₦${totalAmount.toLocaleString()}
+
+📎 View Full Invoice:
+https://hitechdistributors.com/invoice/${newInvoiceId}
+
+Please confirm receipt of this invoice.`;
+
+    // Launch WhatsApp to Lucy
+    const waLink = `https://wa.me/2349166241953?text=${encodeURIComponent(waText)}`;
+    window.open(waLink, "_blank");
+    
+    // Launch Email
+    window.location.href = `mailto:hitechdistributors@gmail.com,hitechd@hitechd.com?subject=New Invoice ${newInvoiceId}&body=${encodeURIComponent(waText)}`;
+
+    setInvoiceStatus("generated");
   };
 
-  // Submit Repair Triage with AI evaluation
   const submitRepairDesk = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repairBrandModel || !repairProblem || !repairCustName || !repairCustPhone) {
-      alert("Please fill in all repair details.");
+    if (!repairCustName || !repairCustPhone || !repairProductName || !repairModelSerial || !repairProblem) {
+      alert("Please fill in all required repair details.");
       return;
     }
 
     setSubmittingRepair(true);
 
-    const refCode = `HT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-
-    let aiCategory = "General Hardware";
-    let aiComplexity = "Medium";
-
-    // Request AI Triage from Gemini
-    try {
-      const res = await fetch("/api/gemini/repair-triage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problem: repairProblem }),
-      });
-      if (res.ok) {
-        const triage = await res.json();
-        aiCategory = triage.category;
-        aiComplexity = triage.complexity;
-      }
-    } catch (e) {
-      console.warn("AI repair triage failed, utilizing fallback defaults.", e);
-    }
+    const refCode = `RPR-${Math.floor(100 + Math.random() * 900)}`;
 
     const newRepair: RepairSubmission = {
       id: "REP-" + Date.now().toString().slice(-6),
-      type: repairDeviceType,
-      brand: repairBrandModel,
-      problem: repairProblem,
       name: repairCustName,
       phone: repairCustPhone,
+      email: repairCustEmail,
+      productName: repairProductName,
+      modelSerial: repairModelSerial,
+      problem: repairProblem,
+      method: repairMethod,
       ref: refCode,
       status: "Received",
-      aiCategory,
-      aiComplexity,
       submittedAt: new Date().toISOString(),
     };
 
@@ -1192,19 +1485,25 @@ export default function App() {
       saveLocal("ht_repairs", updatedList);
     }
 
-    // Send WhatsApp notification
-    const waText = `Hello, I just registered a repair request on your Hublet app.\nRef: ${refCode}\nDevice: ${repairDeviceType} (${repairBrandModel})\nProblem: ${repairProblem}\nCustomer: ${repairCustName}`;
-    const link = `https://wa.me/${WA_GEN}?text=${encodeURIComponent(waText)}`;
+    // Send WhatsApp notification to Ruth
+    const waText = `New Repair Request!\nRef: ${refCode}\nCustomer: ${repairCustName}\nPhone: ${repairCustPhone}\nProduct: ${repairProductName} (${repairModelSerial})\nProblem: ${repairProblem}\nMethod: ${repairMethod}`;
+    const link = `https://wa.me/2348034832773?text=${encodeURIComponent(waText)}`;
     window.open(link, "_blank");
 
+    // Email link
+    window.location.href = `mailto:hitechdistributors@gmail.com?subject=Repair Request ${refCode}&body=${encodeURIComponent(waText)}`;
+
     // Reset Form
-    setRepairBrandModel("");
-    setRepairProblem("");
     setRepairCustName("");
     setRepairCustPhone("");
+    setRepairCustEmail("");
+    setRepairProductName("");
+    setRepairModelSerial("");
+    setRepairProblem("");
+    setRepairMethod("In-Store");
     setSubmittingRepair(false);
 
-    alert(`Repair logged successfully! Reference number: ${refCode}`);
+    setRepairSuccess(`Your repair ticket #${refCode} has been received. Our repairs team (Ruth) will contact you within 24 hours.`);
   };
 
   // Track My Repair
@@ -1258,6 +1557,80 @@ export default function App() {
       }
       return a;
     }));
+  };
+
+  // Escalation Submit
+  const submitEscalation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!escName || !escPhone || !escDesc || !escUrgency) return;
+    setSubmittingEsc(true);
+    
+    const ticketNum = "MGR-" + Math.floor(100 + Math.random() * 900);
+    const newEsc = {
+      id: ticketNum,
+      name: escName,
+      phone: escPhone,
+      email: escEmail,
+      ref: escRef,
+      desc: escDesc,
+      urgency: escUrgency,
+      timestamp: Date.now()
+    };
+    
+    try {
+      await addDoc(collection(db, "escalations"), newEsc);
+    } catch(err) {
+      console.warn("Firebase save failed for escalation");
+    }
+
+    const eseText = `⭐ New Escalation Request from ${escName}
+Inquiry Type: ${escUrgency}
+Issue: ${escDesc}
+Please review and generate escalation code.`;
+
+    const lucyText = `⭐ New Escalation Request from ${escName}
+Inquiry Type: ${escUrgency}
+Issue: ${escDesc}
+Please review and generate escalation code. (Backup)`;
+
+    const emailText = `⭐ New Escalation Request #${ticketNum} from ${escName}
+Inquiry Type: ${escUrgency}
+Customer: ${escName}
+Phone: ${escPhone}
+Email: ${escEmail || "N/A"}
+Issue: ${escDesc}`;
+
+    // Open WhatsApp to Ese
+    window.open(`https://wa.me/2347032724432?text=${encodeURIComponent(eseText)}`, "_blank");
+    
+    // Open WhatsApp to Lucy (with delay to prevent popup blocking)
+    setTimeout(() => {
+      window.open(`https://wa.me/2349166241953?text=${encodeURIComponent(lucyText)}`, "_blank");
+    }, 500);
+
+    // Forward to GM (with delay)
+    setTimeout(() => {
+      const gmText = `⭐ Escalation Forwarded #${ticketNum}
+Inquiry Type: ${escUrgency}
+Customer: ${escName}
+Phone: ${escPhone}
+Issue: ${escDesc}`;
+      window.open(`https://wa.me/2348032175552?text=${encodeURIComponent(gmText)}`, "_blank");
+    }, 1000);
+
+    // Launch Email (with delay to prevent popup blocking)
+    setTimeout(() => {
+      window.location.href = `mailto:hitechdistributors@gmail.com,hitechd@hitechd.com?subject=New Escalation Request ${ticketNum}&body=${encodeURIComponent(emailText)}`;
+    }, 1500);
+    
+    setEscSuccess(`Your ticket #${ticketNum} has been received. A Service Advisor will contact you within 24 hours.`);
+    setSubmittingEsc(false);
+    setEscName("");
+    setEscPhone("");
+    setEscEmail("");
+    setEscRef("");
+    setEscDesc("");
+    setEscUrgency("Medium");
   };
 
   // GM Message Queue Submit
@@ -1404,6 +1777,79 @@ export default function App() {
     setPickupName("");
     setPickupPhone("");
     setPickupItems("");
+  };
+
+  // Shadow School application submit
+  const handleShadowSchoolSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!schName || !schPhone || !schEmail || !schAge || !schProgram || !schReason) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    const ageVal = parseInt(schAge, 10);
+    if (isNaN(ageVal) || ageVal < 10 || ageVal > 120) {
+      alert("Please enter a valid age between 10 and 120.");
+      return;
+    }
+
+    setSubmittingSch(true);
+    setSchSuccess(null);
+
+    const application = {
+      id: "SCH-" + Date.now().toString().slice(-6),
+      name: schName,
+      phone: schPhone,
+      email: schEmail,
+      age: ageVal,
+      program: schProgram,
+      reason: schReason,
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      await addDoc(collection(db, "shadow_school_applications"), application);
+    } catch (error) {
+      console.error("Failed to save to Firestore, falling back to local storage:", error);
+      try {
+        const localApps = localStorage.getItem("ht_school_applications");
+        const list = localApps ? JSON.parse(localApps) : [];
+        list.push(application);
+        localStorage.setItem("ht_school_applications", JSON.stringify(list));
+      } catch (e) {
+        console.error("Local storage fallback failed:", e);
+      }
+    }
+
+    // Prepare message contents
+    const messageText = `🎓 *NEW SHADOW SCHOOL APPLICATION*
+
+👤 *Name:* ${schName}
+📞 *Phone:* ${schPhone}
+📧 *Email:* ${schEmail}
+🎂 *Age:* ${schAge}
+🎯 *Program:* ${schProgram}
+📝 *Why join?:* ${schReason}`;
+
+    // Send WhatsApp to Ese (+234 703 272 4432)
+    const eseWaUrl = `https://wa.me/2347032724432?text=${encodeURIComponent(messageText)}`;
+    window.open(eseWaUrl, "_blank");
+
+    // Send confirmation email to hitechdistributors@gmail.com
+    setTimeout(() => {
+      window.location.href = `mailto:hitechdistributors@gmail.com?subject=Shadow School Application - ${encodeURIComponent(schName)}&body=${encodeURIComponent(messageText)}`;
+    }, 1000);
+
+    setSchSuccess("✅ Your application has been received! We will contact you shortly.");
+    
+    // Reset form fields
+    setSchName("");
+    setSchPhone("");
+    setSchEmail("");
+    setSchAge("");
+    setSchProgram("Computer Repairs");
+    setSchReason("");
+    setSubmittingSch(false);
   };
 
   // Staff Room login authentication
@@ -1693,11 +2139,10 @@ export default function App() {
           <div className="pt-8">
             <div className="flex justify-between items-center border-b-4 border-[#1a2a4a] pb-4 mb-6">
               <div className="flex flex-col text-left">
-                <span className="text-[10px] font-bold tracking-[.4em] uppercase mb-1.5 opacity-60 font-sans">The Network Hub</span>
+                <span className="text-[10px] font-bold tracking-[.4em] uppercase mb-1.5 opacity-60 font-sans">COMPUTER & SOLAR ELECTRONICS HUB</span>
                 <HitechLogo size="lg" />
               </div>
               <div className="flex flex-col text-right">
-                <span className="text-[8px] uppercase font-bold text-slate-400 tracking-widest mb-1">System Protocol</span>
                 <span className="text-xs font-serif italic text-black">v.2.40 Beta</span>
               </div>
             </div>
@@ -1706,9 +2151,9 @@ export default function App() {
               initial={{ y: 15, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-left text-sm font-serif italic text-slate-800 leading-relaxed max-w-sm mb-4"
+              className="text-left text-xs font-serif italic text-slate-800 leading-relaxed max-w-sm mb-4"
             >
-              Curated professional systems, advanced print solutions, and premium-configured solar energy infrastructures. Designed with editorial rigor and engineering precision.
+              HiTech Distributors is an authorized distributor of HP, Dell, and certified solar solutions. We supply computers, laptops, printers, solar equipment, UPS/inverters, networking, CCTV, cameras, phones & tablets & accessories and computer accessories — including inks, toners, cables, and spare parts. We also offer professional repairs, diagnostics, and customer support for all your office technology needs. Built for performance, reliability, and innovation.
             </motion.p>
             
             <motion.p
@@ -1723,12 +2168,12 @@ export default function App() {
 
 
           {/* HiTech Distributors Storefront Facade - Styled with a beautiful glowing dark blue border */}
-          <div className="my-6 overflow-hidden rounded-xl border-2 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)] relative max-h-[220px]">
+          <div className="my-6 overflow-hidden rounded-xl border-2 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)] relative max-h-[220px] bg-slate-900 flex justify-center items-center">
             <img
               src={storefrontImage}
               alt="HiTech Distributors Facade"
               referrerPolicy="no-referrer"
-              className="w-full h-[220px] object-cover object-center brightness-95 hover:brightness-100 transition-all duration-300"
+              className="w-full h-[220px] object-contain object-center brightness-95 hover:brightness-100 transition-all duration-300"
               onError={() => {
                 const defaultFallback = "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
                 if (storefrontImage !== defaultFallback) {
@@ -1919,7 +2364,7 @@ export default function App() {
                   <h3 className="text-white font-black uppercase tracking-tighter text-2xl flex items-center gap-2 mb-2">
                     <Tag className="w-6 h-6 text-red-500" /> Active Flash Deals
                   </h3>
-                  <p className="text-xs font-mono tracking-widest uppercase text-slate-400">Exclusive promotional flash discounts. Claim to reserve on WhatsApp before stock finishes.</p>
+                  <p className="text-xs font-mono tracking-widest uppercase text-white">Exclusive promotional flash discounts. Claim to reserve on WhatsApp before stock finishes.</p>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -1987,6 +2432,30 @@ export default function App() {
             {currentRoom === "gallery" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to the Gallery! Browse through our product images to get a feel for what HiTech Distributors offers. Click any image to learn more. Prices are shown below each image to give you a quick reference. Enjoy exploring!" />
+                
+                {/* Mockup Gallery Section */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)] mb-2">
+                  <h3 className="text-white font-bold text-lg flex items-center gap-2 mb-4">
+                    <Camera className="w-5 h-5 text-blue-400" /> HiTech Product Showcase
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {MOCKUP_GALLERY_IMAGES.map((mockup, idx) => (
+                      <div key={idx} className="bg-white rounded-lg overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex flex-col">
+                        <div className="h-48 overflow-hidden bg-slate-50 relative">
+                          <img src={mockup.img} alt={mockup.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <div className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
+                            {mockup.category}
+                          </div>
+                        </div>
+                        <div className="p-3 flex flex-col flex-1 border-t border-slate-100">
+                          <h4 className="text-sm font-bold text-slate-900 mb-1 leading-tight">{mockup.title}</h4>
+                          <p className="text-[10px] text-slate-500 leading-relaxed mt-auto">{mockup.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <PresetSelector />
                 <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
                   <h3 className="text-blue-400 font-bold text-base flex items-center gap-2">
@@ -1997,8 +2466,20 @@ export default function App() {
                   <MediaUploadButton 
                     type="image" 
                     label="Upload Image to Gallery" 
-                    onUploadSuccess={(url) => {
-                      setGalleryImages(prev => [{ title: "New Uploaded Photo", caption: "User uploaded image", url }, ...prev]);
+                    onUploadSuccess={async (url) => {
+                      const id = "img-" + Date.now().toString();
+                      const payload = {
+                        title: "New Uploaded Photo",
+                        caption: "User uploaded image",
+                        url,
+                        timestamp: new Date().toISOString()
+                      };
+                      try {
+                        await setDoc(doc(db, "gallery_images", id), payload);
+                      } catch (e) {
+                        console.error("Gallery image upload sync failed:", e);
+                        setGalleryImages(prev => [payload, ...prev]);
+                      }
                     }}
                   />
                 </div>
@@ -2142,77 +2623,126 @@ export default function App() {
                     </div>
 
                     {invoiceStatus === "draft" ? (
-                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                        <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Customer Information</p>
-                        <input
-                          type="text"
-                          placeholder="Customer Full Name"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          className="w-full bg-slate-950 rounded-lg border border-slate-800 px-3 py-2 text-xs text-[var(--cr)] outline-none"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Active WhatsApp Phone Number"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(e.target.value)}
-                          className="w-full bg-slate-950 rounded-lg border border-slate-800 px-3 py-2 text-xs text-[var(--cr)] outline-none"
-                        />
+                      <div className="p-4 bg-white rounded-xl border border-slate-300 shadow-sm flex flex-col gap-3">
+                        <p className="text-xs font-bold text-[#1a1a2e] uppercase mb-1">Customer Information</p>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Full Name *</label>
+                          <input
+                            type="text"
+                            placeholder="John Doe"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            className="w-full bg-slate-50 rounded border border-slate-300 px-3 py-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Phone Number *</label>
+                          <input
+                            type="tel"
+                            placeholder="+234 801 234 5678"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(e.target.value)}
+                            className="w-full bg-slate-50 rounded border border-slate-300 px-3 py-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Email (Optional)</label>
+                          <input
+                            type="email"
+                            placeholder="john.doe@email.com"
+                            value={customerEmail}
+                            onChange={(e) => setCustomerEmail(e.target.value)}
+                            className="w-full bg-slate-50 rounded border border-slate-300 px-3 py-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8]"
+                          />
+                        </div>
                         <button
-                          onClick={() => setInvoiceStatus("generated")}
-                          className="w-full py-3 bg-[var(--bl)] hover:bg-blue-600 rounded-lg text-xs font-bold text-white uppercase tracking-wider"
+                          onClick={handleGenerateInvoice}
+                          className="w-full py-3 mt-2 bg-[#1a73e8] hover:bg-[#2b85e4] text-white rounded font-bold uppercase tracking-wider text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                         >
-                          Generate Official Invoice →
+                          <FileText className="w-4 h-4" /> Generate Invoice
                         </button>
                       </div>
                     ) : (
-                      <div className="p-4 bg-slate-900 border-2 border-dashed border-slate-800 rounded-xl flex flex-col gap-4">
-                        <div className="text-center">
-                          <span className="text-[10px] bg-slate-800 border border-slate-700 px-2 py-0.5 rounded text-amber-400 font-mono">OFFICIAL INVOICE GENERATED</span>
+                      <div className="flex flex-col gap-4">
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-center shadow-sm">
+                          <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                          <p className="text-emerald-800 font-bold text-sm">Your invoice has been sent to our Sales team.</p>
                         </div>
-                        <div className="text-xs font-mono text-slate-400 flex flex-col gap-1.5 bg-slate-950 p-3 rounded">
-                          <p>Billed To: {customerName}</p>
-                          <p>Phone: {customerPhone}</p>
-                          <p>Date: {new Date().toLocaleDateString()}</p>
-                          <p className="price border-t border-slate-800 my-1 pt-1 font-bold text-[#1a1a2e]">Grand Total: ₦{calculateCartTotal().toLocaleString()}</p>
-                        </div>
-
-                        <div className="bg-[var(--dk2)] p-3 rounded-lg border border-slate-800 text-xs">
-                          <p className="font-bold text-[var(--yl)] mb-1">🏦 Direct Bank Payment Instructions</p>
-                          <p className="text-[11px] text-slate-300 mb-2">{bankInfo}</p>
-                          <p className="text-[10px] text-[var(--mu)]">Please transfer the total invoice amount to this bank account and upload your payment confirmation receipt below.</p>
-                        </div>
-
-                        {/* Phase 1: Upload test file form inside invoice desk */}
-                        <form onSubmit={handleFileUpload} className="p-3 bg-slate-950 rounded-lg border border-slate-800 flex flex-col gap-2">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 font-mono">Proof of Payment upload</p>
-                          <div className="flex gap-2">
-                            <input
-                              type="file"
-                              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                              className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-[10px] file:bg-slate-800 file:text-slate-200 file:cursor-pointer"
-                            />
-                            <button
-                              type="submit"
-                              disabled={uploadLoading}
-                              className="px-3 py-1 bg-gradient-to-r from-[var(--rd2)] to-[var(--rd)] text-xs text-white rounded font-bold hover:opacity-90 flex-shrink-0"
-                            >
-                              {uploadLoading ? "Uploading..." : "Upload"}
-                            </button>
+                        
+                        <div className="bg-white border-2 border-[#1a1a2e] rounded shadow-md overflow-hidden font-mono text-[#1a1a2e] text-xs">
+                          <div className="p-4 flex flex-col gap-1 text-center border-b-2 border-dashed border-[#1a1a2e] bg-slate-50">
+                            <h2 className="font-bold text-base text-[#1a73e8] flex items-center justify-center gap-1"><span className="w-3 h-3 rounded-full bg-[#1a73e8] inline-block"></span> HITECH DISTRIBUTORS</h2>
+                            <p>Computers · Office Equipment · Solar Sizing Hub</p>
+                            <p>6 Airport Road, Warri · Delta State, Nigeria</p>
                           </div>
-                          {uploadUrl && (
-                            <p className="text-[10px] text-emerald-400 font-mono break-all">✓ Receipt verified: {uploadUrl}</p>
-                          )}
-                          {uploadError && (
-                            <p className="text-[10px] text-red-500 font-mono">{uploadError}</p>
-                          )}
-                        </form>
-
+                          
+                          <div className="p-4 flex flex-col gap-4">
+                            <h3 className="text-center font-bold text-sm uppercase tracking-widest">Sales Invoice</h3>
+                            
+                            <div className="flex justify-between font-bold">
+                              <span>Invoice #: {invoiceId}</span>
+                              <span>Date: {new Date().toLocaleDateString('en-GB')}</span>
+                            </div>
+                            
+                            <div className="flex flex-col gap-1">
+                              <p>Customer: {customerName}</p>
+                              <p>Phone: {customerPhone}</p>
+                              {customerEmail && <p>Email: {customerEmail}</p>}
+                            </div>
+                            
+                            <div className="border-t-2 border-b-2 border-[#1a1a2e] py-2 mt-2">
+                              <div className="grid grid-cols-12 gap-1 font-bold pb-2 border-b border-dashed border-[#1a1a2e]">
+                                <div className="col-span-6">ITEM</div>
+                                <div className="col-span-2 text-center">QTY</div>
+                                <div className="col-span-4 text-right">TOTAL</div>
+                              </div>
+                              <div className="flex flex-col gap-2 pt-2">
+                                {cart.map((item, i) => {
+                                  const priceStr = getDisplayPrice(item.product);
+                                  const priceNum = priceStr === "CALL" ? 0 : parseInt(priceStr.replace(/[^\d]/g, ""), 10);
+                                  return (
+                                    <div key={i} className="grid grid-cols-12 gap-1 items-start">
+                                      <div className="col-span-6 break-words">{item.product.n}</div>
+                                      <div className="col-span-2 text-center">{item.quantity}</div>
+                                      <div className="col-span-4 text-right font-bold">₦{(priceNum * item.quantity).toLocaleString()}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            <div className="flex flex-col items-end gap-1 font-bold text-sm mt-2">
+                              <div className="w-full max-w-[200px] flex justify-between">
+                                <span>SUBTOTAL:</span>
+                                <span>₦{calculateCartTotal().toLocaleString()}</span>
+                              </div>
+                              <div className="w-full max-w-[200px] flex justify-between text-lg text-[#1a73e8]">
+                                <span>TOTAL DUE:</span>
+                                <span>₦{calculateCartTotal().toLocaleString()}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="border-t-2 border-[#1a1a2e] pt-3 mt-3 flex flex-col gap-1 text-[11px]">
+                              <p className="font-bold">Payment Instructions:</p>
+                              <p>Bank: {bankInfo}</p>
+                              <p className="italic text-slate-600 mt-1">Please transfer the total amount and send payment confirmation to Sales & Orders.</p>
+                            </div>
+                            
+                            <div className="border-t border-dashed border-slate-300 pt-3 mt-1 text-center font-bold">
+                              Thank you for choosing HiTech Distributors!
+                            </div>
+                          </div>
+                        </div>
+                        
                         <button
-                          onClick={submitInvoiceOrder}
-                          className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:opacity-90 rounded-lg text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-1.5"
+                          onClick={() => {
+                            setInvoiceStatus("draft");
+                            setCart([]);
+                            setCurrentRoom("showroom");
+                          }}
+                          className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-[#1a1a2e] rounded border border-slate-300 font-bold uppercase tracking-wider text-xs transition-colors"
                         >
-                          <CheckCircle className="w-4 h-4" /> I Have Paid - Notify on WhatsApp
+                          Start New Order
                         </button>
                       </div>
                     )}
@@ -2225,31 +2755,117 @@ export default function App() {
             {currentRoom === "operational" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to the Operational Desk! Find the right contact for your needs. Click any card to connect via WhatsApp or email. For escalations, submit a ticket and it will be routed to the right person." />
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
-                  <h3 className="text-amber-500 font-bold text-base flex items-center gap-2">
-                    <MapPin className="w-5 h-5" /> Operational Desk
-                  </h3>
-                  <p className="text-xs text-[var(--mu)]">Find active business coordinates, branch locations, logistics delivery timelines, and bank accounts.</p>
-                </div>
-
-                <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                  <h4 className="font-bold text-sm text-[var(--yl)] border-b border-slate-800 pb-2">📍 Warri Headquarters</h4>
-                  <div className="text-xs text-slate-300 flex flex-col gap-2">
-                    <p><strong>Address:</strong> 6 Airport Road, Warri, Delta State, Nigeria</p>
-                    <p><strong>Working Hours:</strong> Mon – Sat, 8:00 AM – 6:00 PM</p>
-                    <p><strong>Email:</strong> support@hitechd.com</p>
+                
+                {escSuccess ? (
+                  <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col items-center justify-center text-center gap-3 shadow-sm">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold text-emerald-800 text-lg">Ticket Received</h3>
+                    <p className="text-emerald-700 text-sm leading-relaxed">{escSuccess}</p>
+                    <button onClick={() => {setEscSuccess(null); setShowEscalationForm(false);}} className="mt-2 px-6 py-2 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors">
+                      OK
+                    </button>
                   </div>
-                  <div className="h-32 rounded-lg overflow-hidden border border-slate-800 bg-slate-950 flex flex-col items-center justify-center text-slate-500 text-xs font-mono relative">
-                    <MapPin className="w-8 h-8 text-[var(--rd)] mb-1" />
-                    <span>6 Airport Road Map coordinates</span>
-                    <span className="absolute top-2 right-2 text-[8px] bg-slate-800 px-1 rounded">Delta State</span>
+                ) : showEscalationForm ? (
+                  <div className="bg-white rounded-xl border-2 border-[#1a2a4a] overflow-hidden shadow-md">
+                    <div className="bg-[#1a2a4a] text-white p-3 flex justify-between items-center">
+                      <h3 className="font-bold text-sm flex items-center gap-2">
+                        <Star className="w-4 h-4 text-amber-400" /> Escalation Request
+                      </h3>
+                      <button onClick={() => setShowEscalationForm(false)} className="text-white/70 hover:text-white transition-colors"><X className="w-4 h-4" /></button>
+                    </div>
+                    <form onSubmit={submitEscalation} className="p-4 flex flex-col gap-3">
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Full Name *</label>
+                        <input required type="text" value={escName} onChange={(e) => setEscName(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Phone Number *</label>
+                        <input required type="tel" value={escPhone} onChange={(e) => setEscPhone(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Email (Optional)</label>
+                        <input type="email" value={escEmail} onChange={(e) => setEscEmail(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Order/Product Ref (Optional)</label>
+                        <input type="text" value={escRef} onChange={(e) => setEscRef(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Urgency Level *</label>
+                        <select value={escUrgency} onChange={(e) => setEscUrgency(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white">
+                          <option value="Low">Low</option>
+                          <option value="Medium">Medium</option>
+                          <option value="High">High</option>
+                          <option value="Urgent">Urgent</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Issue Description *</label>
+                        <textarea required rows={4} value={escDesc} onChange={(e) => setEscDesc(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] resize-none bg-white" />
+                      </div>
+                      
+                      <div className="flex gap-2 mt-2">
+                        <button type="submit" disabled={submittingEsc} className="flex-1 py-2.5 bg-[#1a73e8] text-white font-bold uppercase tracking-wider text-xs rounded hover:bg-[#2b85e4] transition-colors flex items-center justify-center gap-1">
+                          {submittingEsc ? "Submitting..." : <><Send className="w-4 h-4" /> Submit Escalation</>}
+                        </button>
+                        <button type="button" onClick={() => setShowEscalationForm(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-xs rounded border border-slate-300 hover:bg-slate-200 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
                   </div>
-                </div>
-
-                <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-2">
-                  <h4 className="font-bold text-sm text-[var(--yl)] border-b border-slate-800 pb-2">📦 Delivery & Logistics</h4>
-                  <p className="text-xs text-slate-300 leading-relaxed">We support standard door-to-door secure delivery across Warri, Sapele, Benin City, and nationwide shipping. Deliveries inside Warri are dispatched same-day!</p>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {[
+                      { title: "Front Desk & General Support", name: "Ese", num: "+2347032724432", email: "hitechdistributors@gmail.com", color: "bg-[#1a73e8]", icon: <Building className="w-5 h-5 text-white" /> },
+                      { title: "Sales & Order Department", name: "Lucy", num: "09166241953", email: "hitechdistributors@gmail.com", color: "bg-[#34a853]", icon: <ShoppingCart className="w-5 h-5 text-white" /> },
+                      { title: "Live Video Call Request", name: "Sophie", num: "+2348144824531", email: "hitechdistributors@gmail.com", color: "bg-[#9c27b0]", icon: <Video className="w-5 h-5 text-white" /> },
+                      { title: "Repairs & Logistics Tracker", name: "Ruth", num: "+2348034832773", email: "hitechdistributors@gmail.com", color: "bg-[#fa7b17]", icon: <Wrench className="w-5 h-5 text-white" /> },
+                      { title: "Pocket Store App Support", name: "Fortune", num: "+2349052127886", email: "hitechdistributors@gmail.com", color: "bg-[#009688]", icon: <Smartphone className="w-5 h-5 text-white" /> }
+                    ].map((card, i) => (
+                      <div key={i} className="flex flex-col bg-white border border-[#1a2a4a] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                        <div className={`${card.color} p-2 flex items-center gap-2`}>
+                          {card.icon}
+                          <h4 className="font-bold text-white text-xs leading-tight">{card.title}</h4>
+                        </div>
+                        <div className="p-3 flex flex-col gap-1.5 flex-grow">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-[#1a1a2e]">
+                            <User className="w-3.5 h-3.5 text-slate-400" /> {card.name}
+                          </div>
+                          <div className="flex gap-2 mt-auto pt-2 border-t border-slate-100">
+                            <button onClick={() => window.open(`https://wa.me/${card.num.replace('+', '')}?text=Hello ${card.name}, I need assistance.`, '_blank')} className="flex-1 py-1.5 bg-[#25D366] hover:bg-[#1da851] text-white text-[10px] font-bold rounded flex justify-center items-center gap-1 transition-colors">
+                              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                            </button>
+                            <button onClick={() => window.location.href = `mailto:${card.email}`} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold rounded flex justify-center items-center gap-1 transition-colors">
+                              <Mail className="w-3.5 h-3.5" /> Email
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Escalation Card */}
+                    <div className="flex flex-col bg-white border border-[#1a2a4a] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow md:col-span-2">
+                      <div className="bg-[#dc3545] p-2 flex items-center gap-2">
+                        <Star className="w-5 h-5 text-white" />
+                        <h4 className="font-bold text-white text-xs leading-tight">Submit Escalation Request</h4>
+                      </div>
+                      <div className="p-3 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#1a1a2e]">
+                          <User className="w-3.5 h-3.5 text-slate-400" /> Ese
+                        </div>
+                        <p className="text-[10px] text-slate-500 leading-tight">Fill out the escalation form to generate a priority ticket (MGR-XXX).</p>
+                        <div className="mt-1 pt-2 border-t border-slate-100">
+                          <button onClick={() => setShowEscalationForm(true)} className="w-full py-2 bg-[#fee2e2] hover:bg-[#fca5a5] text-[#b91c1c] text-[10px] font-bold rounded flex justify-center items-center gap-1 uppercase tracking-wider transition-colors">
+                            <FileText className="w-3.5 h-3.5" /> Open Escalation Form
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -2257,13 +2873,7 @@ export default function App() {
             {currentRoom === "repair" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to the Diagnostics Desk! Submit a repair request for your device. Fill in the form below, and our repairs team (Ruth) will contact you within 24 hours. You can track your repair status using your ticket number." />
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
-                  <h3 className="text-[var(--rd)] font-bold text-base flex items-center gap-2">
-                    <Wrench className="w-5 h-5" /> Diagnostics & Repair Desk
-                  </h3>
-                  <p className="text-xs text-[var(--mu)]">Request repair diagnostics. Our AI system suggests fault categories and repair complexity instantly!</p>
-                </div>
-
+                
                 {/* Sub-view switches */}
                 <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1.5 rounded-lg border border-slate-800">
                   <button onClick={() => setTrackResult(null)} className={`py-1.5 text-xs font-bold rounded ${!trackResult ? "bg-slate-800 text-[var(--yl)]" : "text-slate-400"}`}>
@@ -2274,115 +2884,128 @@ export default function App() {
                   </button>
                 </div>
 
-                {!trackResult ? (
-                  <form onSubmit={submitRepairDesk} className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Device Details</p>
-                    
-                    <div className="grid grid-cols-2 gap-2">
-                      <select value={repairDeviceType} onChange={(e) => setRepairDeviceType(e.target.value)}
-                              className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none">
-                        <option value="Laptop">Laptop</option>
-                        <option value="Desktop">Desktop</option>
-                        <option value="Printer">Printer</option>
-                        <option value="Monitor">Monitor</option>
-                        <option value="Other">Other Device</option>
-                      </select>
-                      <input
-                        type="text"
-                        placeholder="Brand & Model"
-                        value={repairBrandModel}
-                        onChange={(e) => setRepairBrandModel(e.target.value)}
-                        className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none"
-                      />
+                {repairSuccess && !trackResult ? (
+                  <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col items-center justify-center text-center gap-3 shadow-sm">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                    <p className="text-emerald-700 text-sm leading-relaxed">{repairSuccess}</p>
+                    <button onClick={() => setRepairSuccess(null)} className="mt-2 px-6 py-2 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors">
+                      OK
+                    </button>
+                  </div>
+                ) : !trackResult ? (
+                  <form onSubmit={submitRepairDesk} className="p-4 bg-white rounded-xl border border-[#1a2a4a] flex flex-col gap-3 shadow-sm">
+                    <div className="flex items-center gap-2 border-b border-slate-200 pb-2 mb-2">
+                      <Wrench className="w-5 h-5 text-[#1a73e8]" />
+                      <h3 className="text-[#1a1a2e] font-bold text-base">Repair Ticket Form</h3>
                     </div>
 
-                    <textarea
-                      placeholder="Detailed Fault Description (e.g. laptop won't boot, screen flickers, printer has paper jam)"
-                      value={repairProblem}
-                      onChange={(e) => setRepairProblem(e.target.value)}
-                      rows={3}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full"
-                    />
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Customer Name *</label>
+                      <input required type="text" value={repairCustName} onChange={(e) => setRepairCustName(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Phone Number *</label>
+                      <input required type="tel" value={repairCustPhone} onChange={(e) => setRepairCustPhone(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Email (Optional)</label>
+                      <input type="email" value={repairCustEmail} onChange={(e) => setRepairCustEmail(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Product Name *</label>
+                      <input required type="text" value={repairProductName} onChange={(e) => setRepairProductName(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Model/Serial Number *</label>
+                      <input required type="text" value={repairModelSerial} onChange={(e) => setRepairModelSerial(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Fault Description *</label>
+                      <textarea required rows={3} value={repairProblem} onChange={(e) => setRepairProblem(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] resize-none bg-white" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-[#1a1a2e] uppercase mb-1 block">Preferred Pickup Method *</label>
+                      <select value={repairMethod} onChange={(e) => setRepairMethod(e.target.value)} className="w-full border border-slate-300 rounded p-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8] bg-white">
+                        <option value="In-Store">In-Store</option>
+                        <option value="Drop-off">Drop-off</option>
+                      </select>
+                    </div>
 
-                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono mt-2">Customer Details</p>
-                    <input
-                      type="text"
-                      placeholder="Your Full Name"
-                      value={repairCustName}
-                      onChange={(e) => setRepairCustName(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Your Phone Number"
-                      value={repairCustPhone}
-                      onChange={(e) => setRepairCustPhone(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full"
-                    />
-
-                    <button
-                      type="submit"
-                      disabled={submittingRepair}
-                      className="w-full py-3 mt-2 bg-gradient-to-r from-[var(--rd2)] to-[var(--rd)] text-xs font-bold text-white uppercase tracking-wider rounded-lg shadow-md"
-                    >
-                      {submittingRepair ? "Evaluating Triage..." : "Register Repair Desk →"}
-                    </button>
+                    <div className="flex gap-2 mt-2">
+                      <button type="submit" disabled={submittingRepair} className="flex-1 py-2.5 bg-[#1a73e8] text-white font-bold uppercase tracking-wider text-xs rounded hover:bg-[#2b85e4] transition-colors flex items-center justify-center gap-1">
+                        {submittingRepair ? "Submitting..." : <><Send className="w-4 h-4" /> Submit Repair Request</>}
+                      </button>
+                      <button type="button" onClick={() => {
+                        setRepairCustName("");
+                        setRepairCustPhone("");
+                        setRepairCustEmail("");
+                        setRepairProductName("");
+                        setRepairModelSerial("");
+                        setRepairProblem("");
+                        setRepairMethod("In-Store");
+                      }} className="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-xs rounded border border-slate-300 hover:bg-slate-200 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <div className="flex flex-col gap-4">
-                    <form onSubmit={handleTrackRepair} className="p-3 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex gap-2">
+                    <form onSubmit={handleTrackRepair} className="p-3 bg-white rounded-xl border border-[#1a2a4a] flex gap-2">
                       <input
                         type="text"
-                        placeholder="Reference Code, e.g. HT-2026-101"
+                        placeholder="Ticket Number, e.g. RPR-001"
                         value={trackRef}
                         onChange={(e) => setTrackRef(e.target.value)}
-                        className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2 flex-grow outline-none font-mono"
+                        className="bg-slate-50 border border-slate-300 text-sm text-[#1a1a2e] rounded-lg p-2 flex-grow outline-none focus:border-[#1a73e8] font-mono"
                       />
-                      <button type="submit" className="px-4 py-2 bg-[var(--bl)] hover:bg-blue-600 text-xs text-white rounded-lg font-bold">
-                        Track
+                      <button type="submit" className="px-4 py-2 bg-[#1a73e8] hover:bg-[#2b85e4] text-xs text-white rounded-lg font-bold flex items-center gap-1">
+                        <Search className="w-3.5 h-3.5" /> Check Status
                       </button>
                     </form>
 
-                    {trackError && <p className="text-xs text-red-400 font-mono text-center">{trackError}</p>}
+                    {trackError && <p className="text-xs text-red-500 font-bold text-center">{trackError}</p>}
 
                     {trackResult && (
-                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-mono bg-slate-800 border border-slate-700 text-slate-300 px-2 py-0.5 rounded font-bold uppercase">{trackResult.ref}</span>
-                          <span className="text-xs text-[var(--yl)] font-bold">{trackResult.status}</span>
+                      <div className="p-4 bg-white rounded-xl border border-[#1a2a4a] flex flex-col gap-4">
+                        <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                          <h4 className="font-bold text-[#1a1a2e] flex items-center gap-2">
+                            <Wrench className="w-4 h-4 text-[#1a73e8]" /> Ticket #: <span className="font-mono text-[#1a73e8]">{trackResult.ref}</span>
+                          </h4>
                         </div>
 
-                        <div className="text-xs font-mono text-slate-400 flex flex-col gap-1.5 border-b border-slate-800/80 pb-3">
-                          <p><strong>Client:</strong> {trackResult.name}</p>
-                          <p><strong>Device:</strong> {trackResult.type} ({trackResult.brand})</p>
-                          <p><strong>Problem:</strong> "{trackResult.problem}"</p>
+                        <div className="text-sm text-[#1a1a2e] flex flex-col gap-1.5">
+                          <p><strong>Product:</strong> {trackResult.productName}</p>
+                          <p className="flex items-center gap-1 mt-2"><strong>Status:</strong> <span className="text-[#1a73e8] font-bold uppercase">● {trackResult.status}</span></p>
                         </div>
 
-                        {/* AI Triage Information Block */}
-                        {trackResult.aiCategory && (
-                          <div className="p-3 rounded-lg bg-red-950/20 border border-red-900/30 text-xs">
-                            <p className="font-bold text-red-400 flex items-center gap-1 mb-1">
-                              <Info className="w-3.5 h-3.5" /> AI Assist Triage Diagnostic Recommendation
-                            </p>
-                            <p className="text-slate-300"><strong>Classified Fault:</strong> {trackResult.aiCategory}</p>
-                            <p className="text-slate-300"><strong>Complexity estimate:</strong> {trackResult.aiComplexity}</p>
-                          </div>
-                        )}
-
-                        {/* Progress Stepper */}
-                        <div>
-                          <p className="text-[10px] uppercase font-mono tracking-wider text-[var(--mu)] mb-3">Repair Progress Steps</p>
-                          <div className="flex justify-between items-center px-2 relative">
-                            {/* Connector line */}
-                            <div className="absolute top-2.5 left-6 right-6 h-[2px] bg-slate-800 z-0" />
-                            {["Received", "Diagnosed", "Sent Away", "In Repair", "Returned", "Ready for Pickup"].map((stg, i) => (
-                              <div key={stg} className="flex flex-col items-center z-10 relative">
-                                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold ${getStageDotClass(trackResult.status, stg, i, ["Received", "Diagnosed", "Sent Away", "In Repair", "Returned", "Ready for Pickup"])}`} />
-                                <span className="text-[7px] text-slate-500 uppercase tracking-tighter mt-1">{stg.slice(0, 7)}</span>
-                              </div>
-                            ))}
+                        <div className="bg-slate-50 border border-slate-200 rounded p-3">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Timeline:</p>
+                          <div className="flex flex-col gap-2 text-xs">
+                            <div className="flex items-center gap-2 text-[#1a1a2e]"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> {new Date(trackResult.submittedAt).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'})} - Request Received</div>
+                            <div className="flex items-center gap-2 text-[#1a1a2e]">
+                              {["Under Review", "Being Repaired", "Ready for Collection", "Collected"].includes(trackResult.status) ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />} 
+                              {["Under Review", "Being Repaired", "Ready for Collection", "Collected"].includes(trackResult.status) ? new Date(trackResult.submittedAt).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : "Pending"}: Under Review
+                            </div>
+                            <div className={`flex items-center gap-2 ${["Being Repaired", "Ready for Collection", "Collected"].includes(trackResult.status) ? "text-[#1a1a2e]" : "text-slate-500"}`}>
+                              {["Being Repaired", "Ready for Collection", "Collected"].includes(trackResult.status) ? <span className="w-3.5 h-3.5 rounded-full bg-[#1a73e8] flex-shrink-0" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />} 
+                              {["Being Repaired", "Ready for Collection", "Collected"].includes(trackResult.status) ? new Date(new Date(trackResult.submittedAt).getTime() + 86400000).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'}) : "Pending"}: Being Repaired
+                            </div>
+                            <div className={`flex items-center gap-2 ${["Ready for Collection", "Collected"].includes(trackResult.status) ? "text-[#1a1a2e]" : "text-slate-500"}`}>
+                              {["Ready for Collection", "Collected"].includes(trackResult.status) ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />} 
+                              Pending: Ready for Collection
+                            </div>
                           </div>
                         </div>
+
+                        <div className="text-xs text-[#1a1a2e] italic">
+                          <strong>Notes:</strong> {trackResult.problem}
+                        </div>
+
+                        <button onClick={() => window.open(`https://wa.me/2348034832773?text=Hello Ruth, I am checking on my repair ticket ${trackResult.ref}`, '_blank')} className="w-full py-2 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] text-[10px] font-bold rounded flex justify-center items-center gap-1 transition-colors mt-2">
+                          <MessageCircle className="w-3.5 h-3.5" /> CONTACT RUTH
+                        </button>
                       </div>
                     )}
                   </div>
@@ -2394,33 +3017,37 @@ export default function App() {
             {currentRoom === "channels" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to Channels! Connect with HiTech Distributors on social media. Follow us for updates, promotions, and behind-the-scenes content." />
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
-                  <h3 className="text-blue-400 font-bold text-base flex items-center gap-2">
-                    <Network className="w-5 h-5" /> Communication Channels
+                <div className="p-4 rounded-xl bg-white border border-[#1a2a4a]">
+                  <h3 className="font-bold text-base flex items-center gap-2 text-[#1a1a2e]">
+                    <Network className="w-5 h-5 text-[#1a73e8]" /> Communication Channels
                   </h3>
-                  <p className="text-xs text-[var(--mu)]">Quick direct contact cards for Sales, Solar queries, general support, and technical staff.</p>
+                  <p className="text-xs text-black/60 mt-1">Connect with HiTech Distributors on our social media platforms and communication channels.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { title: "Support Desk", channel: "WhatsApp General", icon: <Wrench className="w-5 h-5 text-red-500" />, desc: "Report issues, parts lookup, or software warranty", wa: WA_GEN },
-                    { title: "Solar Projects", channel: "WhatsApp Solar", icon: <Sun className="w-5 h-5 text-amber-500 animate-pulse" />, desc: "Solar batteries, design inquiries, site assessment", wa: WA_SALES },
-                    { title: "Wholesale & bulk", channel: "WhatsApp Sales", icon: <ShoppingCart className="w-5 h-5 text-blue-500" />, desc: "Bulk corporate office hardware procurement", wa: WA_SALES },
-                    { title: "Inventory", channel: "WhatsApp Stock", icon: <FolderPlus className="w-5 h-5 text-purple-400" />, desc: "Check accessories, cables and specific model specs", wa: WA_INVENTORY }
+                    { title: "WhatsApp Channel", subtitle: "+234 916 624 1953", action: "MESSAGE", link: "https://wa.me/2349166241953", icon: <MessageCircle className="w-6 h-6 text-[#25D366]" /> },
+                    { title: "Facebook", subtitle: "facebook.com/hitechd", action: "VISIT", link: "https://facebook.com/hitechd", icon: <Facebook className="w-6 h-6 text-[#1877F2]" /> },
+                    { title: "Instagram", subtitle: "@hitechdistributors", action: "VISIT", link: "https://instagram.com/hitechdistributors", icon: <Instagram className="w-6 h-6 text-[#E1306C]" /> },
+                    { title: "TikTok", subtitle: "@hitechdistributors", action: "VISIT", link: "https://tiktok.com/@hitechdistributors", icon: <Video className="w-6 h-6 text-black" /> },
+                    { title: "Website", subtitle: "www.hitechd.com", action: "VISIT", link: "https://www.hitechd.com", icon: <Globe className="w-6 h-6 text-[#1a73e8]" /> },
+                    { title: "Status Downloader", subtitle: "Download WhatsApp Status", action: "OPEN", link: "#", icon: <Download className="w-6 h-6 text-[#1a1a2e]" /> }
                   ].map((chan, idx) => (
-                    <div key={idx} className="p-3 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col justify-between h-[150px]">
+                    <div key={idx} className="p-3 bg-white rounded-xl border border-[#1a2a4a] flex flex-col justify-between min-h-[120px]">
                       <div>
-                        <div className="flex gap-2 items-center mb-1">
+                        <div className="flex gap-2 items-start mb-1">
                           {chan.icon}
-                          <h4 className="font-bold text-xs text-[var(--cr)]">{chan.title}</h4>
+                          <div className="flex flex-col">
+                            <h4 className="font-bold text-xs text-[#1a1a2e] leading-tight">{chan.title}</h4>
+                            <p className="text-[9px] text-black/60 leading-tight mt-0.5 break-words">{chan.subtitle}</p>
+                          </div>
                         </div>
-                        <p className="text-[10px] text-[var(--mu)] leading-relaxed">{chan.desc}</p>
                       </div>
                       <button
-                        onClick={() => window.open(`https://wa.me/${chan.wa}?text=Hello, I have an inquiry about ${chan.title.toLowerCase()}`, "_blank")}
-                        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white rounded"
+                        onClick={() => window.open(chan.link, chan.link === "#" ? "_self" : "_blank")}
+                        className="w-full py-1.5 mt-2 bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] text-[10px] font-bold rounded uppercase tracking-wider transition-colors"
                       >
-                        Message Channel
+                        [{chan.action}]
                       </button>
                     </div>
                   ))}
@@ -2444,14 +3071,14 @@ export default function App() {
                 <div className="flex-grow bg-slate-950 rounded-xl border border-slate-800 p-3 overflow-y-auto flex flex-col gap-3 h-[300px]">
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`p-2.5 rounded-xl max-w-[85%] text-xs leading-relaxed ${msg.sender === "user" ? "bg-[var(--bl2)] text-white" : "bg-[var(--dk2)] text-slate-200 border border-slate-800"}`}>
+                      <div className={`p-2.5 rounded-xl max-w-[85%] text-xs leading-relaxed ${msg.sender === "user" ? "bg-[var(--bl2)] text-white" : "bg-white text-[#1a1a2e] border border-slate-800"}`}>
                         {msg.text}
                       </div>
                     </div>
                   ))}
                   {chatLoading && (
                     <div className="flex justify-start">
-                      <div className="p-2.5 rounded-xl bg-[var(--dk2)] border border-slate-800 flex items-center gap-1 text-[10px] text-[var(--mu)]">
+                      <div className="p-2.5 rounded-xl bg-white border border-slate-800 flex items-center gap-1 text-[10px] text-[#1a1a2e]">
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Thinking...
                       </div>
                     </div>
@@ -2830,12 +3457,82 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Display Floor Selection Panel */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)] mb-4">
+                  <h3 className="text-[var(--yl)] font-bold text-sm flex items-center gap-2 mb-3 border-b border-slate-800 pb-2">
+                    🏪 DISPLAY FLOOR SELECTION
+                  </h3>
+                  
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-2 block">Mode:</label>
+                      <div className="flex gap-2">
+                        {(["DEFAULT", "DEFAULT_PLUS", "CUSTOM", "ALL"] as const).map(mode => (
+                          <button
+                            key={mode}
+                            onClick={() => setDisplayFloorMode(mode)}
+                            className={`flex-1 py-2 rounded text-[10px] font-bold uppercase transition-colors ${
+                              displayFloorMode === mode 
+                                ? "bg-blue-600 text-white border border-blue-500" 
+                                : "bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-600"
+                            }`}
+                          >
+                            {mode.replace("_", " + ")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+                      <p className="text-sm font-bold text-white mb-1">
+                        Selected Products: {
+                          displayFloorMode === "DEFAULT" ? 25 :
+                          displayFloorMode === "ALL" ? 155 :
+                          displayFloorMode === "DEFAULT_PLUS" ? 25 + displayFloorSelection.length :
+                          displayFloorSelection.length
+                        } out of 155
+                      </p>
+                      {displayFloorMode === "DEFAULT_PLUS" && (
+                        <p className="text-[10px] text-[var(--mu)] font-mono">(25 from DEFAULT + {displayFloorSelection.length} additional)</p>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={async () => {
+                          const conf = { mode: displayFloorMode, selection: displayFloorSelection };
+                          try {
+                            await setDoc(doc(db, "settings", "display_floor_config"), conf, { merge: true });
+                            setCsvStatus("✅ Display Floor Selection Saved!");
+                            setTimeout(() => setCsvStatus(""), 3000);
+                          } catch (e) {
+                            console.error("Failed to save display floor config", e);
+                          }
+                        }}
+                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2"
+                      >
+                        💾 SAVE SELECTION
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setDisplayFloorMode("DEFAULT");
+                          setDisplayFloorSelection([]);
+                        }}
+                        className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2"
+                      >
+                        🔄 RESET TO DEFAULT
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Data Table */}
                 <div className="bg-slate-900 rounded-xl border border-[var(--border)] overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[2500px]">
                       <thead>
                         <tr className="bg-slate-950 border-b border-slate-800 text-[9px] uppercase tracking-wider text-[var(--mu)]">
+                          <th className="p-3 font-medium">Selection</th>
                           <th className="p-3 font-medium">No.</th>
                           <th className="p-3 font-medium">Brand</th>
                           <th className="p-3 font-medium">Product Code</th>
@@ -2864,9 +3561,37 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="text-[10px] text-slate-300">
-                        {products.filter(p => !sheetSearch || p.n.toLowerCase().includes(sheetSearch.toLowerCase()) || p.pn?.toLowerCase().includes(sheetSearch.toLowerCase())).map((p, index) => (
-                          <tr key={p.id} onClick={() => setEditingProduct(p)} className="border-b border-slate-800/50 hover:bg-slate-800/30 group cursor-pointer">
-                            <td className="p-3 font-mono">{p.displayOrder || index + 1}</td>
+                        {products.filter(p => !sheetSearch || p.n.toLowerCase().includes(sheetSearch.toLowerCase()) || p.pn?.toLowerCase().includes(sheetSearch.toLowerCase())).map((p, index) => {
+                          const rowNum = String(p.displayOrder || index + 1);
+                          const isDefaultLocked = parseInt(rowNum) >= 131 && parseInt(rowNum) <= 155;
+                          const isSelected = displayFloorSelection.includes(rowNum);
+
+                          return (
+                            <tr key={p.id} onClick={() => setEditingProduct(p)} className="border-b border-slate-800/50 hover:bg-slate-800/30 group cursor-pointer">
+                              <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                                {isDefaultLocked ? (
+                                  <div className="flex items-center gap-1 text-slate-500 font-bold bg-slate-800/50 px-2 py-1 rounded">
+                                    <Lock className="w-3 h-3" /> DEFAULT
+                                  </div>
+                                ) : (
+                                  <label className="flex items-center gap-2 cursor-pointer bg-slate-900 hover:bg-slate-800 border border-slate-700 px-2 py-1 rounded transition-colors" onClick={(e) => e.stopPropagation()}>
+                                    <input 
+                                      type="checkbox"
+                                      className="accent-blue-500"
+                                      checked={isSelected}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setDisplayFloorSelection(prev => [...prev, rowNum]);
+                                        } else {
+                                          setDisplayFloorSelection(prev => prev.filter(r => r !== rowNum));
+                                        }
+                                      }}
+                                    />
+                                    <span className="font-bold text-blue-400">ADD TO DEFAULT</span>
+                                  </label>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono">{rowNum}</td>
                             <td className="p-3">{p.brand}</td>
                             <td className="p-3 font-mono text-[var(--yl)]">{p.pn || "—"}</td>
                             <td className="p-3">{p.cat}</td>
@@ -2899,7 +3624,8 @@ export default function App() {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                        );
+                      })}
                       </tbody>
                     </table>
                   </div>
@@ -2970,6 +3696,173 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Shadow School Room */}
+            {currentRoom === "school" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 text-left">
+                <Teleprompter text="Welcome to the HiTech Shadow School! We train youths on digital marketing, computer repairs, solar solutions, and entrepreneurship. Apply now to join the next cohort and build your future." />
+                
+                {/* About Section */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)] flex flex-col gap-3">
+                  <h3 className="text-emerald-400 font-bold text-base flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5 text-emerald-400" /> 🎯 ABOUT THE SHADOW SCHOOL
+                  </h3>
+                  <p className="text-xs text-[var(--mu)] leading-relaxed">
+                    The HiTech Shadow School is a hands-on training program designed to equip youths with practical skills in:
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-2 my-1">
+                    <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 flex items-center gap-1.5">
+                      <span className="text-emerald-400 text-lg">🔧</span> Computer Repairs
+                    </div>
+                    <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 flex items-center gap-1.5">
+                      <span className="text-emerald-400 text-lg">📈</span> Digital Marketing
+                    </div>
+                    <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 flex items-center gap-1.5">
+                      <span className="text-emerald-400 text-lg">☀️</span> Solar Repairs
+                    </div>
+                    <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 flex items-center gap-1.5">
+                      <span className="text-emerald-400 text-lg">💡</span> Entrepreneurship
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800/80 pt-3 mt-1 flex flex-col gap-2 font-mono text-[10px] text-slate-400">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 uppercase">📍 Location:</span>
+                      <span className="text-slate-200">HiTech Distributors Showroom, Warri</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 uppercase">⏳ Duration:</span>
+                      <span className="text-slate-200">3 Months (Intensive Training)</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500 uppercase">👥 Cohort Size:</span>
+                      <span className="text-emerald-400">Limited slots available</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Application Form */}
+                <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                  <div className="flex items-center gap-2 border-b border-slate-800 pb-2 mb-1">
+                    <span className="text-xs uppercase tracking-wider font-mono text-emerald-400 font-bold">📝 APPLICATION FORM</span>
+                  </div>
+
+                  {schSuccess ? (
+                    <div className="p-4 bg-emerald-950/40 border border-emerald-500/30 rounded-lg text-xs text-emerald-300 text-center flex flex-col items-center gap-2 my-2">
+                      <CheckCircle className="w-8 h-8 text-emerald-400 animate-bounce" />
+                      <p className="font-bold">{schSuccess}</p>
+                      <button 
+                        onClick={() => setSchSuccess(null)}
+                        className="mt-2 px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-[10px] font-bold rounded uppercase text-white transition-colors"
+                      >
+                        Submit another application
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleShadowSchoolSubmit} className="flex flex-col gap-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Full Name *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Enter your full name"
+                          value={schName}
+                          onChange={(e) => setSchName(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Phone Number *</label>
+                          <input
+                            type="tel"
+                            required
+                            placeholder="e.g. 0703 272 4432"
+                            value={schPhone}
+                            onChange={(e) => setSchPhone(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Age *</label>
+                          <input
+                            type="number"
+                            required
+                            min="10"
+                            max="120"
+                            placeholder="Your Age"
+                            value={schAge}
+                            onChange={(e) => setSchAge(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Email Address *</label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="name@example.com"
+                          value={schEmail}
+                          onChange={(e) => setSchEmail(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Program of Interest *</label>
+                        <div className="relative">
+                          <select
+                            required
+                            value={schProgram}
+                            onChange={(e) => setSchProgram(e.target.value)}
+                            className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500 cursor-pointer appearance-none"
+                          >
+                            <option value="Computer Repairs">🔧 Computer Repairs</option>
+                            <option value="Digital Marketing">📈 Digital Marketing</option>
+                            <option value="Solar Repairs">☀️ Solar Repairs</option>
+                            <option value="Entrepreneurship">💡 Entrepreneurship</option>
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+                            ▼
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1.5">Why do you want to join? *</label>
+                        <textarea
+                          required
+                          rows={3}
+                          placeholder="Briefly state your purpose or reasons for joining..."
+                          value={schReason}
+                          onChange={(e) => setSchReason(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none w-full focus:border-emerald-500 resize-none"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={submittingSch}
+                        className="w-full py-3 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:from-emerald-800 disabled:to-emerald-700 rounded-lg text-xs font-bold text-white uppercase tracking-wider mt-2 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20"
+                      >
+                        {submittingSch ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            SUBMITTING APPLICATION...
+                          </>
+                        ) : (
+                          "SUBMIT APPLICATION"
+                        )}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </motion.div>
             )}
 
             {/* Staff Room Room */}
@@ -3046,6 +3939,13 @@ export default function App() {
                         type="text"
                         value={bankInfo}
                         onChange={(e) => { setBankInfo(e.target.value); localStorage.setItem("ht_bank_info", e.target.value); }}
+                        onBlur={async () => {
+                          try {
+                            await setDoc(doc(db, "settings", "global"), { bankInfo }, { merge: true });
+                          } catch (e) {
+                            console.warn("Failed to sync bank details to Firestore:", e);
+                          }
+                        }}
                         className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2 outline-none font-mono"
                       />
                     </div>
@@ -3080,6 +3980,13 @@ export default function App() {
                             onChange={(e) => {
                               setStorefrontImage(e.target.value);
                               localStorage.setItem("ht_storefront_image", e.target.value);
+                            }}
+                            onBlur={async () => {
+                              try {
+                                await setDoc(doc(db, "settings", "global"), { storefrontImage }, { merge: true });
+                              } catch (e) {
+                                console.warn("Failed to sync storefront photo to Firestore:", e);
+                              }
                             }}
                             placeholder="Paste image URL here..."
                             className="w-full bg-slate-950 border border-slate-800 text-[11px] text-[var(--cr)] rounded p-1.5 outline-none font-mono"
@@ -3116,10 +4023,15 @@ export default function App() {
                         <div className="grid grid-cols-1 gap-1.5">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
+                              try {
+                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
+                              } catch (e) {
+                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
+                              }
                               setUploadStatus("Selected premium storefront preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -3128,10 +4040,15 @@ export default function App() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
+                              try {
+                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
+                              } catch (e) {
+                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
+                              }
                               setUploadStatus("Selected clean showroom preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -3140,10 +4057,15 @@ export default function App() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
+                              try {
+                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
+                              } catch (e) {
+                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
+                              }
                               setUploadStatus("Selected tech devices preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -3171,6 +4093,193 @@ export default function App() {
                       {csvStatus && <p className="text-[10px] text-emerald-400 font-mono text-center">{csvStatus}</p>}
                     </div>
 
+                    {/* Action Feedback Banner */}
+                    {staffActionStatus && (
+                      <div className="p-3 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 rounded-lg text-xs font-mono text-center flex items-center justify-between gap-2">
+                        <span>{staffActionStatus}</span>
+                        <button onClick={() => setStaffActionStatus(null)} className="text-emerald-400 hover:text-white font-bold px-1 text-[11px]">✕</button>
+                      </div>
+                    )}
+
+                    {/* Receipt Generation Form */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <h4 className="font-bold text-[13px] text-white uppercase border-b border-slate-800 pb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-emerald-400" /> ISSUE RECEIPT
+                      </h4>
+                      {!showReceipt ? (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Receipt Number (Optional)</label>
+                              <input type="text" placeholder="Leave blank to auto-generate" value={receiptNumber} onChange={e => setReceiptNumber(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Customer Name *</label>
+                              <input type="text" value={rcpCustomerName} onChange={e => setRcpCustomerName(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Phone Number *</label>
+                              <input type="tel" value={rcpCustomerPhone} onChange={e => setRcpCustomerPhone(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Email</label>
+                              <input type="email" value={rcpCustomerEmail} onChange={e => setRcpCustomerEmail(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Invoice Number *</label>
+                              <input type="text" value={rcpInvoiceNum} onChange={e => setRcpInvoiceNum(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Amount Paid (₦) *</label>
+                              <input type="number" value={rcpAmount} onChange={e => setRcpAmount(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Payment Method *</label>
+                              <select value={rcpMethod} onChange={e => setRcpMethod(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono">
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Cash">Cash</option>
+                                <option value="POS">POS</option>
+                                <option value="USSD">USSD</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Payment Date *</label>
+                              <input type="date" value={rcpDate} onChange={e => setRcpDate(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Transaction Ref</label>
+                              <input type="text" value={rcpRef} onChange={e => setRcpRef(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">What Was Paid For *</label>
+                              <textarea rows={2} value={rcpPaidFor} onChange={e => setRcpPaidFor(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Balance Remaining (₦)</label>
+                              <input type="number" value={rcpBalance} onChange={e => setRcpBalance(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" />
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                              <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Issued By *</label>
+                              <select value={rcpIssuedBy} onChange={e => setRcpIssuedBy(e.target.value)} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono">
+                                <option value="Lucy">Lucy</option>
+                                <option value="Ruth">Ruth</option>
+                                <option value="Sophie">Sophie</option>
+                                <option value="Ese">Ese</option>
+                              </select>
+                            </div>
+                          </div>
+                          <button onClick={() => setShowReceipt(true)} className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold uppercase tracking-wider text-xs transition-colors shadow-sm">
+                            Generate Receipt
+                          </button>
+                        </>
+                      ) : (
+                        <div className="flex flex-col gap-4">
+                          <div className="bg-white border-2 border-[#1a1a2e] rounded shadow-md overflow-hidden font-mono text-[#1a1a2e] text-xs">
+                            <div className="p-4 flex flex-col gap-1 text-center border-b-2 border-dashed border-[#1a1a2e] bg-[#f0f9f0]">
+                              <h2 className="font-bold text-base text-emerald-600 flex items-center justify-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> HITECH DISTRIBUTORS</h2>
+                              <p>Computers · Office Equipment · Solar Sizing Hub</p>
+                              <p>6 Airport Road, Warri · Delta State, Nigeria</p>
+                              <p>📞 +234 803 217 5552  |  ✉️ hitechdistributors@gmail.com</p>
+                            </div>
+                            
+                            <div className="p-4 flex flex-col gap-4">
+                              <h3 className="text-center font-bold text-sm uppercase tracking-widest bg-emerald-100 text-emerald-800 py-1 rounded">OFFICIAL RECEIPT</h3>
+                              
+                              <div className="flex justify-between font-bold">
+                                <span>Receipt #: {receiptNumber || `RCP-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`}</span>
+                                <span>Date: {rcpDate.split('-').reverse().join('/')}</span>
+                              </div>
+                              <div className="font-bold text-right text-[10px] text-slate-500 mt-[-12px]">Issued By: {rcpIssuedBy}</div>
+                              
+                              <div className="border-t-2 border-b-2 border-[#1a1a2e] py-3 mt-1 flex flex-col gap-1">
+                                <p className="font-bold text-sm mb-1 uppercase text-slate-500">👤 Customer Information</p>
+                                <p>Full Name: <span className="font-bold">{rcpCustomerName}</span></p>
+                                <p>Phone: {rcpCustomerPhone}</p>
+                                {rcpCustomerEmail && <p>Email: {rcpCustomerEmail}</p>}
+                                <p>Invoice Number: {rcpInvoiceNum}</p>
+                              </div>
+                              
+                              <div className="flex flex-col gap-1 border-b-2 border-[#1a1a2e] pb-3">
+                                <p className="font-bold text-sm mb-1 uppercase text-slate-500">💰 Payment Details</p>
+                                <p>Amount Paid: <span className="font-bold text-base">₦{Number(rcpAmount).toLocaleString()}</span></p>
+                                <p>Payment Method: {rcpMethod}</p>
+                                <p>Payment Date: {rcpDate.split('-').reverse().join('/')}</p>
+                                <p>Payment Status: <span className="text-emerald-600 font-bold">✅ CONFIRMED</span></p>
+                              </div>
+
+                              <div className="flex flex-col gap-1 border-b-2 border-[#1a1a2e] pb-3">
+                                <p className="font-bold text-sm mb-1 uppercase text-slate-500">🏦 Receiving Account</p>
+                                <p>Bank Name: <span className="font-bold">GTBank</span></p>
+                                <p>Account Name: <span className="font-bold">HiTech Distributors</span></p>
+                                <p>Account Number: <span className="font-bold">1234567890</span></p>
+                                {rcpRef && <p>Transaction Ref: {rcpRef}</p>}
+                              </div>
+                              
+                              <div className="flex flex-col gap-1 border-b-2 border-[#1a1a2e] pb-3">
+                                <p className="font-bold text-sm mb-1 uppercase text-slate-500">🛒 What Was Paid For</p>
+                                <p className="whitespace-pre-wrap">{rcpPaidFor}</p>
+                              </div>
+
+                              <div className="flex flex-col items-end gap-1 font-bold text-sm">
+                                <div className="w-full max-w-[250px] flex justify-between">
+                                  <span>TOTAL AMOUNT DUE:</span>
+                                  <span>₦{(Number(rcpAmount) + Number(rcpBalance)).toLocaleString()}</span>
+                                </div>
+                                <div className="w-full max-w-[250px] flex justify-between">
+                                  <span>AMOUNT PAID:</span>
+                                  <span>₦{Number(rcpAmount).toLocaleString()}</span>
+                                </div>
+                                <div className={`w-full max-w-[250px] flex justify-between ${Number(rcpBalance) > 0 ? "text-red-500" : "text-emerald-600"}`}>
+                                  <span>BALANCE REMAINING:</span>
+                                  <span>₦{Number(rcpBalance).toLocaleString()} {Number(rcpBalance) <= 0 && "✅ PAID IN FULL"}</span>
+                                </div>
+                              </div>
+                              
+                              <div className="border-t-2 border-[#1a1a2e] pt-3 mt-3 flex flex-col gap-1 text-[11px]">
+                                <p className="font-bold text-sm mb-1 uppercase text-slate-500">📞 CONTACT US</p>
+                                <div className="grid grid-cols-2 gap-1 mb-2">
+                                  <p>🏢 Front Desk: +234 703 272 4432</p>
+                                  <p>💰 Sales & Orders: 09166241953</p>
+                                  <p>🛒 Sales Rep: +234 814 482 4531</p>
+                                  <p>🔧 Repairs: +234 803 483 2773</p>
+                                  <p>⭐ General Manager: +234 803 217 5552</p>
+                                  <p>✉️ Email: hitechd@hitechd.com</p>
+                                </div>
+                                <p className="font-bold italic text-center border-t border-slate-300 pt-3">✅ This receipt confirms that the above payment has been received and verified by HiTech Distributors.</p>
+                                <p className="font-bold mt-2 text-center">🙏 Thank you for your business, {rcpCustomerName.split(' ')[0]}!</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <div className="flex gap-2">
+                              <button onClick={() => window.print()} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm border border-slate-700">
+                                📄 Download / Print PDF
+                              </button>
+                              <button onClick={() => {
+                                const waText = `Hello ${rcpCustomerName},\n\nThank you for your payment of ₦${Number(rcpAmount).toLocaleString()} to HiTech Distributors.\n\nYour official receipt ${receiptNumber || 'RCP-XXX'} is ready.\n\nThank you for choosing HiTech Distributors!`;
+                                window.open(`https://wa.me/${rcpCustomerPhone.replace(/\+/g, '')}?text=${encodeURIComponent(waText)}`, '_blank');
+                              }} className="flex-1 py-2 bg-[#25D366] hover:bg-[#1da851] text-white rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+                                <MessageCircle className="w-4 h-4" /> Send WhatsApp
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => {
+                                const mailTo = `mailto:hitechdistributors@gmail.com,hitechd@hitechd.com?subject=New Receipt Issued: ${rcpCustomerName}&body=A new receipt has been issued.%0A%0ACustomer: ${rcpCustomerName}%0AAmount: N${Number(rcpAmount).toLocaleString()}%0APayment Method: ${rcpMethod}%0AInvoice: ${rcpInvoiceNum}`;
+                                window.location.href = mailTo;
+                              }} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1">
+                                <Mail className="w-4 h-4" /> Send Emails
+                              </button>
+                              <button onClick={() => setShowReceipt(false)} className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded text-[10px] font-bold uppercase tracking-wider border border-slate-800">
+                                Create Another
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* GM queue list */}
                     <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
                       <h4 className="font-bold text-xs text-[var(--yl)] uppercase border-b border-slate-800 pb-2">GM Request queue ({gmRequests.length})</h4>
@@ -3183,6 +4292,213 @@ export default function App() {
                               <p className="font-bold text-[var(--yl)] mb-1">{req.type}</p>
                               <p className="text-slate-300">"{req.message}"</p>
                               <p className="text-[10px] text-slate-500 mt-2">By: {req.name} ({req.phone})</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Real-time Invoice & Order desk */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Invoices & Orders Ledger ({orders.length})</h4>
+                        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Cloud Synchronized</span>
+                      </div>
+                      {orders.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 font-mono text-center py-4">No invoices have been generated yet.</p>
+                      ) : (
+                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-1">
+                          {orders.map(order => {
+                            let itemsParsed = [];
+                            try {
+                              itemsParsed = JSON.parse(order.items || "[]");
+                            } catch(e) {}
+                            return (
+                              <div key={order.id} className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs font-mono flex flex-col gap-2">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <span className="font-bold text-blue-400">#{order.id}</span>
+                                    <p className="text-[9px] text-slate-500">{new Date(order.timestamp).toLocaleString()}</p>
+                                  </div>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    order.status === "Pending Payment" ? "bg-amber-500/10 text-amber-400 border border-amber-500/30" :
+                                    order.status === "Paid & Awaiting Processing" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" :
+                                    order.status === "Processed & Ready" ? "bg-blue-500/10 text-blue-400 border border-blue-500/30" :
+                                    "bg-slate-500/10 text-slate-400 border border-slate-500/30"
+                                  }`}>
+                                    {order.status || "Pending Payment"}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-300">
+                                  <p><span className="text-slate-500">Customer:</span> {order.customerName} ({order.phone})</p>
+                                  <p><span className="text-slate-500">Amount:</span> ₦{Number(order.total).toLocaleString()}</p>
+                                  {itemsParsed.length > 0 && (
+                                    <div className="mt-1 pl-2 border-l border-slate-800 text-[10px] text-slate-400 flex flex-col gap-0.5">
+                                      {itemsParsed.map((it: any, i: number) => (
+                                        <p key={i}>• {it.name} (x{it.quantity})</p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                {order.receiptUrl && (
+                                  <div className="mt-1">
+                                    <a href={order.receiptUrl} target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline text-[10px] flex items-center gap-1">
+                                      📎 View Customer Proof of Payment Receipt
+                                    </a>
+                                  </div>
+                                )}
+                                <div className="mt-2 flex flex-wrap gap-1.5 items-center justify-between border-t border-slate-900 pt-2">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] text-slate-500">Status:</span>
+                                    <select 
+                                      value={order.status || "Pending Payment"}
+                                      onChange={async (e) => {
+                                        const newStatus = e.target.value;
+                                        try {
+                                          await setDoc(doc(db, "orders", order.id), { status: newStatus }, { merge: true });
+                                          setStaffActionStatus(`Status updated for #${order.id}!`);
+                                          setTimeout(() => setStaffActionStatus(null), 3000);
+                                        } catch (err) {
+                                          console.error("Failed to update status:", err);
+                                        }
+                                      }}
+                                      className="bg-slate-900 text-[10px] text-slate-300 border border-slate-800 rounded px-1.5 py-0.5 outline-none font-mono cursor-pointer"
+                                    >
+                                      <option value="Pending Payment">Pending Payment</option>
+                                      <option value="Paid & Awaiting Processing">Paid & Awaiting Processing</option>
+                                      <option value="Processed & Ready">Processed & Ready</option>
+                                      <option value="Dispatched/Completed">Dispatched/Completed</option>
+                                    </select>
+                                  </div>
+                                  {!order.paid && (
+                                    <button
+                                      onClick={async () => {
+                                        const rcpNum = "RCP-" + Math.floor(100000 + Math.random() * 900000);
+                                        const rcpPayload = {
+                                          id: rcpNum,
+                                          orderId: order.id,
+                                          customerName: order.customerName,
+                                          total: order.total,
+                                          timestamp: new Date().toISOString()
+                                        };
+                                        try {
+                                          await setDoc(doc(db, "receipts", rcpNum), rcpPayload);
+                                          await setDoc(doc(db, "orders", order.id), { paid: true, status: "Paid & Awaiting Processing" }, { merge: true });
+                                          setStaffActionStatus(`Issued Official Receipt ${rcpNum}!`);
+                                          setTimeout(() => setStaffActionStatus(null), 4000);
+                                        } catch (err) {
+                                          console.error("Failed to issue receipt:", err);
+                                        }
+                                      }}
+                                      className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800/60 rounded text-[9px] uppercase font-bold cursor-pointer"
+                                    >
+                                      Issue Official Receipt
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Official Receipts Issued */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Official Receipts Issued ({receipts.length})</h4>
+                        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Live Log</span>
+                      </div>
+                      {receipts.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 font-mono text-center py-4">No receipts have been issued yet.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2 max-h-[250px] overflow-y-auto pr-1">
+                          {receipts.map(rcp => (
+                            <div key={rcp.id} className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px] font-mono flex flex-col gap-1">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-emerald-400">{rcp.id}</span>
+                                <span className="text-[9px] text-slate-500">{new Date(rcp.timestamp).toLocaleString()}</span>
+                              </div>
+                              <p className="text-slate-300">Order Ref: <span className="text-blue-400">#{rcp.orderId}</span></p>
+                              <p className="text-slate-300">Customer: {rcp.customerName}</p>
+                              <p className="text-slate-300 font-bold">Amount Paid: ₦{Number(rcp.total).toLocaleString()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Escalation Tickets */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <h4 className="font-bold text-xs text-[var(--yl)] uppercase border-b border-slate-800 pb-2">Escalation tickets (MGR-XXX) ({escalations.length})</h4>
+                      {escalations.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 font-mono text-center py-4">No escalated tickets logged.</p>
+                      ) : (
+                        <div className="flex flex-col gap-2.5">
+                          {escalations.map(esc => (
+                            <div key={esc.id} className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs font-mono flex flex-col gap-1">
+                              <div className="flex justify-between items-center">
+                                <p className="font-bold text-red-400">{esc.id} [{esc.urgency}]</p>
+                                <button 
+                                  onClick={async () => {
+                                    try {
+                                      await deleteDoc(doc(db, "escalations", esc.id));
+                                      setStaffActionStatus(`Resolved ticket ${esc.id}!`);
+                                      setTimeout(() => setStaffActionStatus(null), 3000);
+                                    } catch (err) {
+                                      console.error("Failed to delete escalation:", err);
+                                    }
+                                  }}
+                                  className="px-1.5 py-0.5 bg-slate-900 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded text-[9px] border border-slate-800 uppercase cursor-pointer"
+                                >
+                                  Resolve
+                                </button>
+                              </div>
+                              <p className="text-slate-300 mt-1">"{esc.desc}"</p>
+                              <p className="text-[10px] text-slate-500 mt-1">By: {esc.name} ({esc.phone}) {esc.email ? `• ${esc.email}` : ""}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Shadow School Applications */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Shadow School Applicants ({schoolApplications.length})</h4>
+                        <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Enrollment Desk</span>
+                      </div>
+                      {schoolApplications.length === 0 ? (
+                        <p className="text-[10px] text-slate-500 font-mono text-center py-4">No student applications received yet.</p>
+                      ) : (
+                        <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto pr-1">
+                          {schoolApplications.map(app => (
+                            <div key={app.id} className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs font-mono flex flex-col gap-1.5">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold text-amber-400">{app.program}</span>
+                                <span className="text-[9px] text-slate-500">{new Date(app.timestamp).toLocaleString()}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-300">
+                                <p><span className="text-slate-500">Applicant:</span> {app.name} ({app.age} yrs)</p>
+                                <p><span className="text-slate-500">Contact:</span> {app.phone} • {app.email}</p>
+                                <p className="mt-1 text-slate-400 italic">"Reason: {app.reason}"</p>
+                              </div>
+                              <div className="flex justify-end gap-1 border-t border-slate-900 pt-1.5 mt-1">
+                                <button 
+                                  onClick={async () => {
+                                    try {
+                                      await deleteDoc(doc(db, "shadow_school_applications", app.id));
+                                      setStaffActionStatus(`Application for ${app.name} processed!`);
+                                      setTimeout(() => setStaffActionStatus(null), 3000);
+                                    } catch (err) {
+                                      console.error("Failed to delete application:", err);
+                                    }
+                                  }}
+                                  className="px-2 py-0.5 bg-slate-900 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-800 rounded text-[9px] font-bold uppercase cursor-pointer"
+                                >
+                                  Archive Application
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3435,6 +4751,31 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+                    
+                    {/* AI Response Section */}
+                    <div className="border-t-2 border-dashed border-[#e8f0fe] bg-slate-50 p-4 flex flex-col gap-4">
+                      <h3 className="font-black uppercase tracking-widest text-sm flex items-center gap-2 text-[#1a1a2e]">
+                        🤖 AI COMPARISON ANALYSIS
+                      </h3>
+                      
+                      <div className="flex flex-col gap-4 text-xs text-[#1a1a2e] leading-relaxed">
+                        <div>
+                          <p className="font-bold mb-2 uppercase tracking-wider text-[#555555]">📊 KEY DIFFERENCES:</p>
+                          <div className="flex flex-col gap-3">
+                            <p>1️⃣ <strong>Processor:</strong> {compareProduct1.n} ({compareProduct1.price}) has standard performance, while {compareProduct2.n} ({compareProduct2.price}) has upgraded performance components.</p>
+                            <p>2️⃣ <strong>Performance:</strong> Higher-tier models are faster for multitasking, heavy apps, and demanding tasks. Standard models are good for basic browsing and office work.</p>
+                            <p>3️⃣ <strong>Price:</strong> Compare the price tags – it is worth it if you do heavy work, video editing, or multitasking.</p>
+                          </div>
+                        </div>
+
+                        <div className="bg-[#e8f0fe] p-4 rounded border border-[#1a73e8]/30">
+                          <p className="font-bold mb-2 text-[#1a73e8] uppercase tracking-wider">💡 RECOMMENDATION:</p>
+                          <p>If you are a student or do basic office work, the {compareProduct1.n} ({compareProduct1.price}) is perfect. If you do heavy multitasking or professional work, invest in the {compareProduct2.n} ({compareProduct2.price}) – it will serve you better in the long run.</p>
+                        </div>
+
+                        <p className="font-bold text-emerald-700 bg-emerald-50 p-3 rounded border border-emerald-200">✅ Your choice: Select the product that best fits your needs.</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -3446,23 +4787,24 @@ export default function App() {
           <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-[#1a2a4a] overflow-x-auto">
             <div className="flex justify-between items-center px-2 py-1 max-w-[430px] mx-auto min-w-[430px]">
               {[
-                { id: "showroom", label: "Show", icon: <Building className="w-4 h-4" /> },
-                { id: "display", label: "Display", icon: <Tv className="w-4 h-4" /> },
-                { id: "deals", label: "Deals", icon: <Tag className="w-4 h-4" /> },
-                { id: "livesheet", label: "Prices", icon: <FileText className="w-4 h-4" /> },
                 { id: "gallery", label: "Gallery", icon: <Camera className="w-4 h-4" /> },
                 { id: "video", label: "Videos", icon: <Video className="w-4 h-4" /> },
+                { id: "display", label: "Display", icon: <Tv className="w-4 h-4" /> },
+                { id: "showroom", label: "Show", icon: <Building className="w-4 h-4" /> },
                 { id: "invoice", label: "Invoice", icon: <ShoppingCart className="w-4 h-4" /> },
+                { id: "deals", label: "Deals", icon: <Tag className="w-4 h-4" /> },
+                { id: "livesheet", label: "Prices", icon: <FileText className="w-4 h-4" /> },
+                { id: "channels", label: "Channels", icon: <Network className="w-4 h-4" /> },
                 { id: "operational", label: "Ops", icon: <MapPin className="w-4 h-4" /> },
                 { id: "repair", label: "Repair", icon: <Wrench className="w-4 h-4" /> },
-                { id: "channels", label: "Channels", icon: <Network className="w-4 h-4" /> },
                 { id: "info", label: "AI", icon: <MessageSquare className="w-4 h-4" /> },
                 { id: "contact", label: "Contact", icon: <Mail className="w-4 h-4" /> },
+                { id: "compare", label: "Compare", icon: <GitCompare className="w-4 h-4" /> },
                 { id: "feedback", label: "Review", icon: <Star className="w-4 h-4" /> },
                 { id: "pickup", label: "Pickup", icon: <Calendar className="w-4 h-4" /> },
                 { id: "staff", label: "Staff", icon: <Lock className="w-4 h-4" /> },
                 { id: "sheets", label: "Sheets", icon: <Database className="w-4 h-4" /> },
-                { id: "compare", label: "Compare", icon: <GitCompare className="w-4 h-4" /> }
+                { id: "school", label: "School", icon: <GraduationCap className="w-4 h-4" /> }
               ].map((tab) => (
                 <button
                   key={tab.id}

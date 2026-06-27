@@ -95,6 +95,63 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "managerStatus", "activePreset", "updatedAt"]
+    },
+    "ShadowSchoolApplication": {
+      "title": "Shadow School Application",
+      "description": "An application submitted for the HiTech Shadow School program",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique application ID" },
+        "name": { "type": "string", "description": "Applicant full name" },
+        "phone": { "type": "string", "description": "Applicant phone number" },
+        "email": { "type": "string", "description": "Applicant email address" },
+        "age": { "type": "integer", "description": "Applicant age" },
+        "program": { "type": "string", "enum": ["Computer Repairs", "Digital Marketing", "Solar Repairs", "Entrepreneurship"], "description": "Program of interest" },
+        "reason": { "type": "string", "description": "Reason for wanting to join" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Time of submission" }
+      },
+      "required": ["id", "name", "phone", "email", "age", "program", "reason", "timestamp"]
+    },
+    "Escalation": {
+      "title": "Escalation",
+      "description": "A high-priority ticket submitted for management",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "ref": { "type": "string" },
+        "desc": { "type": "string" },
+        "urgency": { "type": "string" },
+        "timestamp": { "type": "integer" }
+      },
+      "required": ["id", "name", "phone", "desc", "urgency", "timestamp"]
+    },
+    "GalleryImage": {
+      "title": "Gallery Image",
+      "description": "A dynamic photo uploaded to the user gallery",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "caption": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["title", "url", "caption", "timestamp"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "An official receipt generated for paid orders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "total": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "orderId", "customerName", "total", "timestamp"]
     }
   },
   "firestore": {
@@ -121,6 +178,22 @@
     "/settings/{settingId}": {
       "schema": "Setting",
       "description": "Dynamic system settings"
+    },
+    "/shadow_school_applications/{applicationId}": {
+      "schema": "ShadowSchoolApplication",
+      "description": "Applications for the Shadow School training program"
+    },
+    "/escalations/{escalationId}": {
+      "schema": "Escalation",
+      "description": "High priority management escalation tickets"
+    },
+    "/gallery_images/{imageId}": {
+      "schema": "GalleryImage",
+      "description": "Photos uploaded dynamically to the storefront gallery"
+    },
+    "/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Payment receipt receipts issued"
     }
   }
 }

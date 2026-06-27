@@ -114,6 +114,63 @@ service cloud.firestore {
         && (data.keys().size() == 8 || (data.keys().size() == 9 && data.keys().hasAll(['receiptUrl'])));
     }
 
+    function isValidShadowSchoolApplication(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && data.email is string && data.email.size() <= 128
+        && data.age is int && data.age >= 10 && data.age <= 120
+        && data.program in ['Computer Repairs', 'Digital Marketing', 'Solar Repairs', 'Entrepreneurship']
+        && data.reason is string && data.reason.size() <= 2000
+        && data.timestamp is string;
+    }
+
+    function hasValidShadowSchoolKeys(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'email', 'age', 'program', 'reason', 'timestamp'])
+        && data.keys().size() == 8;
+    }
+
+    function isValidEscalation(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 128
+        && data.phone is string && data.phone.size() <= 32
+        && (!data.keys().hasAll(['email']) || data.email is string)
+        && (!data.keys().hasAll(['ref']) || data.ref is string)
+        && data.desc is string && data.desc.size() <= 5000
+        && data.urgency is string && data.urgency.size() <= 64
+        && (data.timestamp is int || data.timestamp is number);
+    }
+
+    function hasValidEscalationKeys(data) {
+      return data.keys().hasAll(['id', 'name', 'phone', 'desc', 'urgency', 'timestamp'])
+        && (data.keys().size() == 6 || (data.keys().size() == 7 && (data.keys().hasAll(['email']) || data.keys().hasAll(['ref']))) || (data.keys().size() == 8 && data.keys().hasAll(['email', 'ref'])));
+    }
+
+    function isValidGalleryImage(data) {
+      return data.title is string && data.title.size() <= 200
+        && data.url is string && data.url.size() <= 10000
+        && data.caption is string && data.caption.size() <= 1000
+        && data.timestamp is string;
+    }
+
+    function hasValidGalleryImageKeys(data) {
+      return data.keys().hasAll(['title', 'url', 'caption', 'timestamp'])
+        && data.keys().size() == 4;
+    }
+
+    function isValidReceipt(data) {
+      return data.id is string && data.id.size() <= 64
+        && data.orderId is string && data.orderId.size() <= 64
+        && data.customerName is string && data.customerName.size() <= 128
+        && (data.total is number || data.total is int)
+        && data.timestamp is string;
+    }
+
+    function hasValidReceiptKeys(data) {
+      return data.keys().hasAll(['id', 'orderId', 'customerName', 'total', 'timestamp'])
+        && data.keys().size() == 5;
+    }
+
     // Collection Rules
 
     match /repairs/{repairId} {
@@ -142,8 +199,8 @@ service cloud.firestore {
 
     match /orders/{orderId} {
       allow read, list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(orderId) && hasValidOrderKeys(incoming()) && isValidOrder(incoming()) && incoming().status == 'Pending Payment' && incoming().paid == false;
-      allow update: if isAdmin();
+      allow create: if isSignedIn() && isValidId(orderId) && hasValidOrderKeys(incoming()) && isValidOrder(incoming());
+      allow update: if isSignedIn();
       allow delete: if isAdmin();
     }
 
@@ -153,8 +210,31 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if isSignedIn();
+    }
+
+    match /shadow_school_applications/{applicationId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(applicationId) && hasValidShadowSchoolKeys(incoming()) && isValidShadowSchoolApplication(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    match /escalations/{escalationId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(escalationId) && hasValidEscalationKeys(incoming()) && isValidEscalation(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    match /gallery_images/{imageId} {
+      allow read, list: if true;
+      allow create, update: if isSignedIn() && isValidId(imageId) && hasValidGalleryImageKeys(incoming()) && isValidGalleryImage(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /receipts/{receiptId} {
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(receiptId) && hasValidReceiptKeys(incoming()) && isValidReceipt(incoming());
+      allow update, delete: if isAdmin();
     }
   }
 }
