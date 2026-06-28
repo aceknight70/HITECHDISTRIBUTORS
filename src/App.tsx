@@ -272,48 +272,48 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
   );
 };
 
+const compressImageToBase64 = (file: File, maxWidth = 1024, maxHeight = 1024, quality = 0.85): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+          resolve(compressedBase64);
+        } else {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => reject(new Error("Image load error"));
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "video", label: string, onUploadSuccess?: (url: string) => void, key?: any }) => {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-
-  const compressImageToBase64 = (file: File, maxWidth = 1024, maxHeight = 1024, quality = 0.85): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let width = img.width;
-          let height = img.height;
-
-          if (width > maxWidth || height > maxHeight) {
-            if (width > height) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            } else {
-              width = Math.round((width * maxHeight) / height);
-              height = maxHeight;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
-            resolve(compressedBase64);
-          } else {
-            resolve(e.target?.result as string);
-          }
-        };
-        img.onerror = () => reject(new Error("Image load error"));
-      };
-      reader.onerror = (error) => reject(error);
-    });
-  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -942,55 +942,53 @@ export default function App() {
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus("Uploading file...");
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setUploadStatus("📤 Processing image...");
 
     try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // Step 1: Compress locally to lightweight Base64 instantly
+      const compressedBase64 = await compressImageToBase64(file);
 
-      if (!response.ok) {
-        throw new Error("Failed to upload image. Server error.");
+      // Step 2: Attempt file upload
+      const formData = new FormData();
+      formData.append("file", file);
+
+      let finalUrl = compressedBase64;
+      let isCloud = false;
+
+      try {
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            if (data.provider === "vercel-blob") {
+              finalUrl = data.url;
+              isCloud = true;
+            } else {
+              console.log("Local fallback returned by server. Storing compressed Base64 permanently in Firestore.");
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.warn("API upload failed, using Base64 fallback:", apiErr);
       }
 
-      const data = await response.json();
-      if (data.success && data.url) {
-        setStorefrontImage(data.url);
-        localStorage.setItem("ht_storefront_image", data.url);
-        try {
-          await setDoc(doc(db, "settings", "global"), { storefrontImage: data.url }, { merge: true });
-        } catch (dbErr) {
-          console.warn("Could not sync storefront photo to Firestore:", dbErr);
-        }
-        setUploadStatus("Upload successful! Applied to starting page.");
-      } else {
-        throw new Error(data.error || "Failed to parse upload response.");
+      setStorefrontImage(finalUrl);
+      localStorage.setItem("ht_storefront_image", finalUrl);
+
+      try {
+        await setDoc(doc(db, "settings", "global"), { storefrontImage: finalUrl }, { merge: true });
+        setUploadStatus(isCloud ? "✅ Image uploaded permanently to cloud!" : "✅ Image saved to database permanently!");
+      } catch (dbErr: any) {
+        console.error("Firestore save error:", dbErr);
+        setUploadStatus("❌ Failed to save image to database.");
       }
     } catch (err: any) {
-      console.warn("API upload failed, falling back to local base64:", err.message);
-      setUploadStatus("⚠️ API failed. Saving locally...");
-      try {
-        const base64Url = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = error => reject(error);
-        });
-        setStorefrontImage(base64Url);
-        localStorage.setItem("ht_storefront_image", base64Url);
-        try {
-          await setDoc(doc(db, "settings", "global"), { storefrontImage: base64Url }, { merge: true });
-        } catch (dbErr) {
-          console.warn("Could not sync storefront photo base64 to Firestore:", dbErr);
-        }
-        setUploadStatus("Upload successful! (Local base64 fallback)");
-      } catch (localErr) {
-        setUploadStatus(`Upload error: ${err.message || "Please check your server."}`);
-      }
+      console.error("Storefront upload failed:", err);
+      setUploadStatus("❌ Failed to process storefront image.");
     } finally {
       setIsUploading(false);
     }
@@ -1503,6 +1501,22 @@ export default function App() {
         else if (currentPreset === "LAST IMPORTED SHEET") list = list.filter(p => p.id && (p.id.startsWith("imp-") || p.id.startsWith("csv-")));
         else if (currentPreset === "WORKBOOK DISPLAY") list = list.filter(p => p.id && !(p.id.startsWith("imp-") || p.id.startsWith("csv-")));
       }
+    }
+
+    // Fail-safe: If the list is empty (e.g. newly loaded app or empty custom selection), load the default 25 products automatically
+    if (list.length === 0) {
+      list = DEFAULT_CSV_DATA.map((p, i) => ({
+        id: `def-${i}`,
+        pn: p.productCode || "—",
+        cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
+        n: `${p.brand} ${p.category}`.trim(),
+        sp: p.specs,
+        price: p.price || "CALL",
+        desc: p.description || "Default Description",
+        bullets: (p as any).bullets,
+        stock: (p as any).stockStatus,
+        displayOrder: p.displayOrder,
+      } as any));
     }
 
     // Apply Firestore overrides
@@ -2251,9 +2265,13 @@ Issue: ${escDesc}`;
             onClick={() => {
               setCurrentPreset(preset.id as any);
               if (preset.id === "DEFAULT") {
-                setDisplayFloorSelection(Array.from({ length: 25 }, (_, i) => String(131 + i)));
+                const defSelection = Array.from({ length: 25 }, (_, i) => String(131 + i));
+                setDisplayFloorSelection(defSelection);
+                setDoc(doc(db, "settings", "display_floor_config"), { selection: defSelection }, { merge: true }).catch(err => console.warn("Failed to sync selection:", err));
               } else if (preset.id === "LAST IMPORTED SHEET") {
-                setDisplayFloorSelection(Array.from({ length: 155 }, (_, i) => String(1 + i)));
+                const impSelection = Array.from({ length: 155 }, (_, i) => String(1 + i));
+                setDisplayFloorSelection(impSelection);
+                setDoc(doc(db, "settings", "display_floor_config"), { selection: impSelection }, { merge: true }).catch(err => console.warn("Failed to sync selection:", err));
               }
             }}
             className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center relative ${currentPreset === preset.id ? "bg-slate-800 shadow-inner " + preset.border : "bg-slate-950 border-slate-800"}`}
@@ -3936,8 +3954,7 @@ Issue: ${escDesc}`;
                       </button>
                       <button 
                         onClick={() => {
-                          setDisplayFloorMode("DEFAULT");
-                          setDisplayFloorSelection([]);
+                          setDisplayFloorSelection(Array.from({ length: 25 }, (_, i) => String(131 + i)));
                         }}
                         className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2"
                       >
