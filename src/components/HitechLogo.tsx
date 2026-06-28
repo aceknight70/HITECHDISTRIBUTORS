@@ -13,7 +13,7 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
       hi: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
       tech: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
       d: "px-1.5 py-0.5 rounded text-[11px] md:text-xs font-black tracking-wide",
-      hub: "text-[11px] md:text-xs tracking-wider font-mono font-bold",
+      hub: "px-1.5 py-0.5 rounded bg-[#1a1a2e] text-[11px] md:text-xs tracking-wider font-mono font-bold text-white",
       gap: "gap-1",
       sub: "text-[7px] md:text-[8px] tracking-[0.2em] font-bold text-slate-400 mt-0.5 uppercase"
     },
@@ -21,7 +21,7 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
       hi: "px-2 py-1 rounded-md text-base font-black tracking-wide",
       tech: "px-2 py-1 rounded-md text-base font-black tracking-wide",
       d: "px-2 py-1 rounded-md text-base font-black tracking-wide",
-      hub: "text-sm tracking-widest font-mono font-bold",
+      hub: "px-2 py-1 rounded-md bg-[#1a1a2e] text-sm tracking-widest font-mono font-bold text-white",
       gap: "gap-1.5",
       sub: "text-[9px] md:text-[10px] tracking-[0.2em] font-bold text-slate-400 mt-1 uppercase"
     },
@@ -29,7 +29,7 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
       hi: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
       tech: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
       d: "px-3 py-1.5 rounded-lg text-2xl md:text-3xl font-black tracking-wide",
-      hub: "text-xl md:text-2xl tracking-[0.15em] font-mono font-bold",
+      hub: "px-3 py-1.5 rounded-lg bg-[#1a1a2e] text-xl md:text-2xl tracking-[0.15em] font-mono font-bold text-white",
       gap: "gap-2.5",
       sub: "text-xs md:text-sm tracking-[0.2em] font-bold text-slate-400 mt-1.5 uppercase"
     }
@@ -145,23 +145,11 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
         {/* HUB */}
         <motion.span
           variants={itemVariants}
-          className={`${currentSize.hub} text-[#ffffff] uppercase flex items-center gap-1.5`}
-          whileHover={{ letterSpacing: "0.2em" }}
+          className={`${currentSize.hub} uppercase flex items-center justify-center`}
+          whileHover={{ scale: 1.05 }}
           transition={{ duration: 0.25 }}
         >
           HUB
-          <motion.span
-            className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-[#10b981] inline-block shadow-[0_0_8px_rgba(16,185,129,0.6)]"
-            animate={{
-              scale: [1, 1.35, 1],
-              opacity: [0.7, 1, 0.7]
-            }}
-            transition={{
-              duration: 1.8,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          />
         </motion.span>
       </div>
       

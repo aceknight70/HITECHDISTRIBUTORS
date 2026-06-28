@@ -65,6 +65,27 @@ input::placeholder {
   opacity: 0.6;
 }
 
+nav.navbar {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.content-area {
+  padding-bottom: 80px !important;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Keep active comparisons clearly marked */
 .bg-blue-950\/60 { background-color: #e0f2fe !important; border-color: #bae6fd !important; }
 

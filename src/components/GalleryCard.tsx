@@ -10,14 +10,26 @@ interface GalleryCardProps {
   onView: (p: Product) => void;
 }
 
+export const getCategoryFallbackImage = (category: string): string => {
+  return "";
+};
+
 export const GalleryCard: React.FC<GalleryCardProps> = ({ product, index, total, onView }) => {
+  const [imgSrc, setImgSrc] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (product) {
+      const url = product.imgFront || product.imgManual || product.imgSide || product.imgBack || product.imgTop || getCategoryFallbackImage(product.cat || "");
+      setImgSrc(url);
+    }
+  }, [product]);
+
   try {
     if (!product) return null;
 
     const brand = product.brand || "HITECH";
     const categoryName = product.cat || "Product";
     const displayName = product.n || "Product Name";
-    const imageUrl = product.imgManual || product.imgFront;
     
     // Determine price display
     const priceDisplay = product.price && product.price !== "CALL" 
@@ -61,14 +73,20 @@ export const GalleryCard: React.FC<GalleryCardProps> = ({ product, index, total,
 
         {/* Gallery Image Container */}
         <div className="w-full h-[200px] bg-white border-b-2 border-slate-200 relative overflow-hidden flex items-center justify-center p-4">
-          {imageUrl ? (
+          {imgSrc ? (
             <motion.img
-              src={imageUrl}
+              src={imgSrc}
               alt={displayName}
               className="w-full h-full object-contain"
               whileHover={{ scale: 1.08 }}
               transition={{ duration: 0.3 }}
               referrerPolicy="no-referrer"
+              onError={() => {
+                const fallback = getCategoryFallbackImage(product.cat || "");
+                if (imgSrc !== fallback) {
+                  setImgSrc(fallback);
+                }
+              }}
             />
           ) : (
             <div className="text-slate-300 flex flex-col items-center gap-2">
@@ -105,7 +123,7 @@ export const GalleryCard: React.FC<GalleryCardProps> = ({ product, index, total,
                 {brand}
               </span>
               <span className="w-1 h-1 rounded-full bg-slate-300" />
-              <span className="text-[10px] font-mono font-black tracking-wider text-blue-600 uppercase">
+              <span className={`text-[10px] font-mono font-black tracking-wider uppercase ${product.cat && ["Inverters", "Solar Panels", "Controllers", "Cables", "All-in-One"].includes(product.cat) ? 'text-[#dc3545]' : 'text-blue-600'}`}>
                 {categoryName}
               </span>
             </div>

@@ -54,14 +54,17 @@ import {
   Globe,
   Download,
   MessageCircle,
-  GraduationCap
+  GraduationCap,
+  Play,
+  Edit,
+  Moon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db, auth, ensureAuth, OperationType, handleFirestoreError } from "./lib/firebase";
 import { collection, addDoc, getDocs, onSnapshot, updateDoc, deleteDoc, doc, setDoc, query, orderBy, limit, writeBatch } from "firebase/firestore";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
-import { GalleryCard } from "./components/GalleryCard";
+import { GalleryCard, getCategoryFallbackImage } from "./components/GalleryCard";
 
 // Global constant fallback config
 const WA_SALES = "2348065210611"; 
@@ -136,6 +139,18 @@ interface CustomDeal {
   badge: string;
 }
 
+interface VideoGalleryItem {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  thumbnailUrl?: string;
+  category: string;
+  timestamp: string;
+  views?: string;
+  duration?: string;
+}
+
 const Teleprompter = ({ text }: { text: string }) => {
   return (
     <div className="bg-[#1a2a4a] text-white py-2 border-4 border-[#1a2a4a] mb-6 overflow-hidden flex items-center shadow-[4px_4px_0px_0px_rgba(26,42,74,1)] relative group select-none">
@@ -152,6 +167,14 @@ const Teleprompter = ({ text }: { text: string }) => {
 };
 
 const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; onAdd: (p: Product) => void; onView: (p: Product) => void; index: number; displayPrice?: string; key?: any }) => {
+  const [imgSrc, setImgSrc] = React.useState<string>("");
+
+  React.useEffect(() => {
+    if (p) {
+      setImgSrc(p.imgFront || p.imgManual || p.imgSide || p.imgBack || p.imgTop || getCategoryFallbackImage(p.cat || ""));
+    }
+  }, [p]);
+
   return (
     <div className="bg-white border-2 border-[#1a2a4a] p-4 flex flex-col gap-3 relative group hover:shadow-[8px_8px_0px_0px_rgba(26,42,74,1)] transition-all">
       <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -165,20 +188,36 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
         </div>
       </div>
       
-      <div className="w-full h-[160px] bg-white flex items-center justify-center border border-slate-200 rounded shadow-sm overflow-hidden relative cursor-pointer group-hover:shadow-md transition-shadow" onClick={() => onView(p)}>
-        {p.imgFront || p.imgManual ? (
-          <img src={p.imgManual || p.imgFront} alt={p.n} className="w-full h-full object-contain hover:scale-110 transition-transform duration-300 drop-shadow-sm" />
+      <div className="w-full h-[160px] bg-slate-50 flex items-center justify-center border border-dashed border-slate-300 rounded shadow-sm overflow-hidden relative cursor-pointer group-hover:bg-slate-100/80 transition-all" onClick={() => onView(p)}>
+        {imgSrc ? (
+          <img 
+            src={imgSrc} 
+            alt={p.n} 
+            className="w-full h-full object-contain hover:scale-110 transition-transform duration-300 drop-shadow-sm bg-white" 
+            referrerPolicy="no-referrer"
+            onError={() => {
+              setImgSrc("");
+            }}
+          />
         ) : (
-          <div className="text-slate-400 opacity-50">
-            {p.cat === "laptops" ? <Laptop className="w-16 h-16" /> : p.cat === "printers" ? <Printer className="w-16 h-16" /> : <Box className="w-16 h-16" />}
+          <div className="text-slate-400 opacity-80 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+            {p.cat === "laptops" ? (
+              <Laptop className="w-10 h-10 text-slate-400" />
+            ) : p.cat === "printers" ? (
+              <Printer className="w-10 h-10 text-slate-400" />
+            ) : (
+              <Box className="w-10 h-10 text-slate-400" />
+            )}
+            <span className="text-[9px] font-black tracking-wider uppercase text-slate-500 mt-1">No Image Uploaded</span>
+            <span className="text-[8px] text-slate-400 font-medium">(Click to Add Photo)</span>
           </div>
         )}
       </div>
 
       <div className="flex gap-2 flex-wrap">
         <span className="px-2 py-1 bg-[#1a2a4a] text-white text-[9px] font-bold uppercase tracking-wider">{p.brand || "HITECH"}</span>
-        <span className="px-2 py-1 bg-slate-200 border border-[#1a2a4a] text-black text-[9px] font-bold uppercase tracking-wider">{p.cat}</span>
-        <span className="px-2 py-1 bg-slate-100 border border-slate-300 text-slate-600 text-[9px] font-mono tracking-wider truncate max-w-[120px]">CODE: {p.pn || "—"}</span>
+        <span className={`px-2 py-1 border border-[#1a2a4a] text-[9px] font-bold uppercase tracking-wider ${SOLAR_CATEGORIES.some(sc => sc.id === p.cat) ? 'bg-red-100 text-[#dc3545]' : 'bg-slate-200 text-black'}`}>{p.cat}</span>
+        <span className={`px-2 py-1 bg-slate-100 border border-slate-300 text-[9px] font-mono tracking-wider truncate max-w-[120px] ${SOLAR_CATEGORIES.some(sc => sc.id === p.cat) ? 'text-[#dc3545]' : 'text-slate-600'}`}>CODE: {p.pn || "—"}</span>
       </div>
 
       <div className="pt-1 pb-1">
@@ -186,18 +225,18 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
       </div>
 
       <div className="border-t border-[#1a2a4a] pt-2">
-        <p className="text-[11px] text-slate-800 leading-tight line-clamp-2 min-h-[30px]">{p.desc}</p>
+        <p className={`text-[11px] leading-tight line-clamp-2 min-h-[30px] ${SOLAR_CATEGORIES.some(sc => sc.id === p.cat) ? 'text-[#dc3545]' : 'text-slate-800'}`}>{p.desc}</p>
       </div>
 
       {p.bullets && (
         <div className="border-t border-[#1a2a4a] pt-2">
-          <p className="text-[10px] text-slate-600 font-mono line-clamp-2">{p.bullets}</p>
+          <p className={`text-[10px] font-mono line-clamp-2 ${SOLAR_CATEGORIES.some(sc => sc.id === p.cat) ? 'text-[#dc3545]' : 'text-slate-600'}`}>{p.bullets}</p>
         </div>
       )}
 
       <div className="border-t border-[#1a2a4a] pt-2 flex items-start gap-1">
         <span className="text-xs">⚙️</span>
-        <p className="text-[11px] font-serif italic text-slate-800 line-clamp-2">{p.sp}</p>
+        <p className={`text-[11px] font-serif italic line-clamp-2 ${SOLAR_CATEGORIES.some(sc => sc.id === p.cat) ? 'text-[#dc3545]' : 'text-slate-800'}`}>{p.sp}</p>
       </div>
 
       <div className="border-t border-[#1a2a4a] pt-2 flex justify-between items-center">
@@ -211,6 +250,12 @@ const ProductCard = ({ p, onAdd, onView, index, displayPrice }: { p: Product; on
 
       <div className="border-t border-[#1a2a4a] pt-2 bg-[#1a2a4a] p-2 mt-2 -mx-4">
         <a href="#" className="text-[10px] text-white font-bold hover:underline flex items-center gap-1">👥 See what others think → Visit Website</a>
+      </div>
+
+      <div className="border-t border-[#1a2a4a] pt-2 pb-1">
+        <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+          📅 Viewed: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+        </span>
       </div>
 
       <div className="border-t border-[#1a2a4a] pt-3 flex gap-2">
@@ -231,12 +276,42 @@ const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  const fileToBase64 = (file: File): Promise<string> => {
+  const compressImageToBase64 = (file: File, maxWidth = 1024, maxHeight = 1024, quality = 0.85): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.src = e.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+            resolve(compressedBase64);
+          } else {
+            resolve(e.target?.result as string);
+          }
+        };
+        img.onerror = () => reject(new Error("Image load error"));
+      };
+      reader.onerror = (error) => reject(error);
     });
   };
 
@@ -245,44 +320,83 @@ const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "
     if (!file) return;
 
     setUploading(true);
-    setStatus("📤 Uploading...");
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setStatus("📤 Processing...");
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-      
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        const data = await response.json();
-        if (response.ok && data.success) {
-          setStatus("✅ Image uploaded successfully!");
-          if (onUploadSuccess) onUploadSuccess(data.url);
-        } else {
-          throw new Error(data.error || "Unknown server error");
+      if (type === "image") {
+        // Step 1: Compress locally to lightweight Base64 instantly
+        const compressedBase64 = await compressImageToBase64(file);
+        
+        // Step 2: Try to upload to server (which would store on Vercel Blob if configured)
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out")), 60000); // 60s timeout
+          
+          const response = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const data = await response.json();
+            if (response.ok && data.success) {
+              if (data.provider === "vercel-blob") {
+                setStatus("✅ Image uploaded to cloud!");
+                if (onUploadSuccess) onUploadSuccess(data.url);
+              } else {
+                // If local fallback was used, the file on disk would be deleted on container restart.
+                // To prevent image loss on container reset, save the compressed Base64 string permanently in Firestore!
+                setStatus("✅ Image saved to database!");
+                if (onUploadSuccess) onUploadSuccess(compressedBase64);
+              }
+            } else {
+              throw new Error(data.error || "Server upload failed");
+            }
+          } else {
+            throw new Error(`Upload failed: ${response.status}`);
+          }
+        } catch (apiErr) {
+          console.warn("API upload failed, using robust Base64 fallback:", apiErr);
+          setStatus("✅ Image saved to database!");
+          if (onUploadSuccess) onUploadSuccess(compressedBase64);
         }
       } else {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        // Video Uploads (No base64 compression, standard file upload)
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out")), 120000); // 120s timeout
+        
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await response.json();
+          if (response.ok && data.success) {
+            setStatus("✅ Video uploaded successfully!");
+            if (onUploadSuccess) onUploadSuccess(data.url);
+          } else {
+            throw new Error(data.error || "Video server error");
+          }
+        } else {
+          throw new Error(`Upload failed: ${response.status}`);
+        }
       }
     } catch (err: any) {
-      console.warn("Vercel Blob failed, falling back to local storage base64:", err.message);
-      setStatus("⚠️ API failed. Saving locally...");
-      try {
-        const base64Url = await fileToBase64(file);
-        setStatus("✅ Image uploaded successfully! (Local)");
-        if (onUploadSuccess) onUploadSuccess(base64Url);
-      } catch (localErr) {
-        setStatus("❌ Upload failed. Please try again.");
-      }
+      console.error("General upload error:", err);
+      setStatus("❌ Upload failed.");
     } finally {
       setUploading(false);
       setTimeout(() => setStatus(null), 3000);
@@ -293,7 +407,7 @@ const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "
     <div className="flex flex-col gap-1 w-full">
       <label className="bg-slate-800 hover:bg-slate-700 text-white px-2 py-1.5 rounded text-[8px] sm:text-[9px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer border border-slate-700 transition-colors text-center w-full min-h-[32px]">
         {uploading ? <Loader2 className="w-3 h-3 flex-shrink-0 animate-spin" /> : <Upload className="w-3 h-3 flex-shrink-0" />}
-        <span className="truncate">{uploading ? "📤 Uploading..." : label}</span>
+        <span className="truncate">{uploading ? "📤 Processing..." : label}</span>
         <input
           type="file"
           accept={type === "image" ? "image/jpeg,image/png,image/webp" : "video/*"}
@@ -316,6 +430,8 @@ const ProductDetailOverlay = ({
   setSelectedProduct, 
   products, 
   setProducts, 
+  solarProducts,
+  setSolarProducts,
   getDisplayPrice, 
   addToCart,
   WA_SALES
@@ -324,6 +440,8 @@ const ProductDetailOverlay = ({
   setSelectedProduct: (p: Product | SolarProduct | null) => void;
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  solarProducts?: SolarProduct[];
+  setSolarProducts?: React.Dispatch<React.SetStateAction<SolarProduct[]>>;
   getDisplayPrice: (p: Product | SolarProduct) => string;
   addToCart: (p: Product | SolarProduct) => void;
   WA_SALES: string;
@@ -331,6 +449,19 @@ const ProductDetailOverlay = ({
   const [activeView, setActiveView] = useState<"Manual" | "Front" | "Side" | "Back" | "Top">("Manual");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  
+  const isSolarItem = selectedProduct ? (solarProducts && solarProducts.some(item => item.id === selectedProduct.id)) || SOLAR_CATEGORIES.some(sc => sc.id === selectedProduct.cat) : false;
+
+  // Helper for closing & checking unsaved changes
+  const handleClose = () => {
+    if (hasUnsavedChanges) {
+      if (window.confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+        setSelectedProduct(null);
+      }
+    } else {
+      setSelectedProduct(null);
+    }
+  };
 
   // Reset view when product changes
   useEffect(() => {
@@ -340,6 +471,33 @@ const ProductDetailOverlay = ({
       setSaveStatus(null);
     }
   }, [selectedProduct?.id]);
+
+  // Keyboard shortcuts (Ctrl+S / Cmd+S to save/close, Escape to close)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!selectedProduct) return;
+      
+      // Escape key to close
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleClose();
+        return;
+      }
+
+      // Ctrl+S or Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (hasUnsavedChanges) {
+          handleSaveChanges();
+        } else {
+          handleClose();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedProduct, hasUnsavedChanges]);
 
   if (!selectedProduct) return null;
 
@@ -357,7 +515,7 @@ const ProductDetailOverlay = ({
   };
 
   const handleImageUpdate = async (view: typeof activeView, url: string) => {
-    const p = selectedProduct as Product;
+    const p = selectedProduct as any;
     let updatedProduct = { ...p };
     
     switch (view) {
@@ -369,20 +527,26 @@ const ProductDetailOverlay = ({
     }
     
     setSelectedProduct(updatedProduct as any);
-    setProducts(prev => prev.map(item => item.id === updatedProduct.id ? updatedProduct as Product : item));
+    const isSolar = solarProducts && solarProducts.some(item => item.id === updatedProduct.id);
+    if (isSolar && setSolarProducts) {
+      setSolarProducts(prev => prev.map(item => item.id === updatedProduct.id ? updatedProduct as any : item));
+    } else {
+      setProducts(prev => prev.map(item => item.id === updatedProduct.id ? updatedProduct as Product : item));
+    }
     setActiveView(view);
     
     // Automatically save to Firestore as requested
+    setSaveStatus("Saving image...");
     try {
       const docId = String(updatedProduct.id);
       const docRef = doc(db, "products", docId);
       await setDoc(docRef, JSON.parse(JSON.stringify(updatedProduct)), { merge: true });
-      setSaveStatus("✅ Data saved successfully! All products and images are stored permanently.");
+      setSaveStatus("✅ Image saved successfully!");
       setHasUnsavedChanges(false);
-      setTimeout(() => setSaveStatus(null), 4000);
+      setTimeout(() => setSaveStatus(null), 3000);
     } catch (e: any) {
       console.error("Firestore auto-save error:", e);
-      setSaveStatus("❌ Failed to save data. Please try again.");
+      setSaveStatus("❌ Failed to save image.");
     }
   };
 
@@ -406,13 +570,25 @@ const ProductDetailOverlay = ({
       const docRef = doc(db, "products", docId);
       await setDoc(docRef, dataToSave, { merge: true });
       
-      setSaveStatus("✅ Data saved successfully! All products and images are stored permanently.");
+      const isSolar = solarProducts && solarProducts.some(item => item.id === selectedProduct.id);
+      if (isSolar && setSolarProducts) {
+        setSolarProducts(prev => prev.map(item => item.id === selectedProduct.id ? selectedProduct as any : item));
+      } else {
+        setProducts(prev => prev.map(item => item.id === selectedProduct.id ? selectedProduct as Product : item));
+      }
+
+      setSaveStatus("✅ Changes saved successfully!");
       setHasUnsavedChanges(false);
-      setTimeout(() => setSaveStatus(null), 3000);
+      
+      // Smoothly close after short delay for satisfying confirmation
+      setTimeout(() => {
+        setSaveStatus(null);
+        setSelectedProduct(null);
+      }, 1000);
     } catch (e: any) {
       console.error("Firestore save error:", e);
       console.error("Data that failed to save:", selectedProduct);
-      setSaveStatus("❌ Failed to save data. Please try again.");
+      setSaveStatus("❌ Failed to save. Please try again.");
     }
   };
 
@@ -426,15 +602,15 @@ const ProductDetailOverlay = ({
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="fixed inset-0 z-50 bg-[#1a2a4a]/60 backdrop-blur-sm flex justify-center items-end"
-          onClick={() => setSelectedProduct(null)}
+          className="fixed inset-0 z-[1050] bg-[#1a2a4a]/60 backdrop-blur-sm flex justify-center items-end"
+          onClick={handleClose}
         >
           <div className="w-full max-w-[430px] bg-[var(--dk2)] border-t border-slate-800 rounded-t-3xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
                onClick={(e) => e.stopPropagation()}>
             
             {/* Drag Handle */}
             <div className="h-6 w-full flex items-center justify-center border-b border-slate-900 flex-shrink-0 cursor-pointer"
-                 onClick={() => setSelectedProduct(null)}>
+                 onClick={handleClose}>
               <div className="w-12 h-1 bg-slate-700 rounded-full" />
             </div>
 
@@ -456,11 +632,23 @@ const ProductDetailOverlay = ({
 
               <div className="w-full h-[160px] bg-white border border-slate-200 rounded shadow-sm flex items-center justify-center text-slate-500 overflow-hidden relative">
                 {currentImageUrl ? (
-                  <img src={currentImageUrl} alt={`${selectedProduct.n} ${activeView}`} className="w-full h-full object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300" />
+                  <img 
+                    src={currentImageUrl} 
+                    alt={`${selectedProduct.n} ${activeView}`} 
+                    className="w-full h-full object-contain drop-shadow-sm hover:scale-105 transition-transform duration-300"
+                    referrerPolicy="no-referrer"
+                  />
                 ) : (
-                  <div className="opacity-50 flex flex-col items-center">
-                    {selectedProduct.cat === "laptops" ? <Laptop className="w-12 h-12 mb-2" /> : <Printer className="w-12 h-12 mb-2" />}
-                    <span className="text-[10px] uppercase font-bold text-slate-400">No {activeView} Image</span>
+                  <div className="text-slate-400 opacity-80 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
+                    {selectedProduct.cat === "laptops" ? (
+                      <Laptop className="w-10 h-10 text-slate-400" />
+                    ) : selectedProduct.cat === "printers" ? (
+                      <Printer className="w-10 h-10 text-slate-400" />
+                    ) : (
+                      <Box className="w-10 h-10 text-slate-400" />
+                    )}
+                    <span className="text-[9px] font-black tracking-wider uppercase text-slate-500 mt-1">No {activeView} Photo Uploaded</span>
+                    <span className="text-[8px] text-slate-400 font-medium">(Upload a photo for the "{activeView}" view below)</span>
                   </div>
                 )}
               </div>
@@ -480,21 +668,40 @@ const ProductDetailOverlay = ({
               <div className="flex flex-col gap-2 mt-2 bg-slate-900 p-3 rounded-xl border border-slate-700">
                 <div className="flex gap-2">
                   <button 
-                    onClick={handleSaveChanges}
-                    disabled={saveStatus === "Saving..." || !hasUnsavedChanges}
-                    className={`flex-1 py-2 ${hasUnsavedChanges ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 text-slate-400 cursor-not-allowed'} text-white rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-colors`}
+                    onClick={hasUnsavedChanges ? handleSaveChanges : handleClose}
+                    disabled={saveStatus === "Saving..." || saveStatus === "Saving image..."}
+                    className={`flex-1 py-2 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg transition-colors text-white ${
+                      saveStatus === "Saving..." || saveStatus === "Saving image..."
+                        ? "bg-slate-700 cursor-wait text-slate-300"
+                        : hasUnsavedChanges
+                        ? "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                        : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+                    }`}
                   >
-                    💾 SAVE CHANGES
+                    {saveStatus === "Saving..." || saveStatus === "Saving image..." ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : hasUnsavedChanges ? (
+                      <>
+                        💾 SAVE CHANGES
+                      </>
+                    ) : (
+                      <>
+                        ✅ DONE & CLOSE
+                      </>
+                    )}
                   </button>
                   <button 
-                    onClick={() => setSelectedProduct(null)}
+                    onClick={handleClose}
                     className="py-2 px-4 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
                   >
-                    ❌ CANCEL
+                    {hasUnsavedChanges ? "❌ DISCARD" : "❌ CLOSE"}
                   </button>
                 </div>
                 {saveStatus && (
-                  <p className={`text-[10px] font-mono text-center ${saveStatus.includes("✅") ? "text-emerald-400" : saveStatus.includes("❌") ? "text-red-400" : "text-amber-400"}`}>
+                  <p className={`text-[10px] font-mono text-center animate-pulse ${saveStatus.includes("✅") ? "text-emerald-400 font-bold" : saveStatus.includes("❌") ? "text-red-400 font-bold" : "text-amber-400"}`}>
                     {saveStatus}
                   </p>
                 )}
@@ -536,7 +743,7 @@ const ProductDetailOverlay = ({
                       setSaveStatus(null);
                     }}
                     placeholder="Product Code"
-                    className="text-[10px] text-slate-500 font-mono bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full transition-colors"
+                    className={`text-[10px] font-mono bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full transition-colors ${isSolarItem ? 'text-[#dc3545]' : 'text-slate-500'}`}
                   />
                 </div>
                 <input 
@@ -548,7 +755,7 @@ const ProductDetailOverlay = ({
                     setSaveStatus(null);
                   }}
                   placeholder="Specs"
-                  className="text-xs text-[var(--mu)] leading-relaxed font-mono bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full transition-colors mt-1 pb-1"
+                  className={`text-xs leading-relaxed font-mono bg-transparent border-b border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full transition-colors mt-1 pb-1 ${isSolarItem ? 'text-[#dc3545]' : 'text-[var(--mu)]'}`}
                 />
               </div>
 
@@ -561,8 +768,14 @@ const ProductDetailOverlay = ({
                     setSaveStatus(null);
                   }}
                   placeholder="Description..."
-                  className="text-xs text-slate-300 leading-relaxed bg-transparent border border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full resize-none min-h-[60px] transition-colors p-1 rounded"
+                  className={`text-xs leading-relaxed bg-transparent border border-transparent focus:border-slate-700 hover:border-slate-800 focus:outline-none w-full resize-none min-h-[60px] transition-colors p-1 rounded ${isSolarItem ? 'text-[#dc3545]' : 'text-slate-300'}`}
                 />
+              </div>
+
+              <div className="border-t border-slate-800/80 pt-3">
+                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
+                  📅 Viewed: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </span>
               </div>
 
               <div className="flex gap-2.5 pt-4 mt-auto">
@@ -682,7 +895,27 @@ const MOCKUP_GALLERY_IMAGES = [
 export default function App() {
   // App navigation state
   const [inStore, setInStore] = useState(false);
-  const [currentRoom, setCurrentRoom] = useState("showroom");
+  const [showGuide, setShowGuide] = useState(false);
+  const [currentRoom, _setCurrentRoom] = useState("showroom");
+  const [roomHistory, setRoomHistory] = useState<string[]>([]);
+
+  const setCurrentRoom = (newRoom: string) => {
+    if (newRoom !== currentRoom) {
+      setRoomHistory(prev => [...prev, currentRoom]);
+      _setCurrentRoom(newRoom);
+    }
+  };
+
+  const handleBack = () => {
+    if (roomHistory.length > 0) {
+      const prevRoom = roomHistory[roomHistory.length - 1];
+      setRoomHistory(prev => prev.slice(0, -1));
+      _setCurrentRoom(prevRoom);
+    } else {
+      setInStore(false);
+    }
+  };
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | SolarProduct | null>(null);
   
@@ -695,10 +928,10 @@ export default function App() {
   const [compareSearch2, setCompareSearch2] = useState("");
   const [storefrontImage, setStorefrontImage] = useState<string>(() => {
     const local = localStorage.getItem("ht_storefront_image");
-    if (local && local !== "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80") {
+    if (local) {
       return local;
     }
-    return "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
+    return "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
   });
 
   const [uploadStatus, setUploadStatus] = useState<string>("");
@@ -738,8 +971,26 @@ export default function App() {
         throw new Error(data.error || "Failed to parse upload response.");
       }
     } catch (err: any) {
-      console.error(err);
-      setUploadStatus(`Upload error: ${err.message || "Please check your server."}`);
+      console.warn("API upload failed, falling back to local base64:", err.message);
+      setUploadStatus("⚠️ API failed. Saving locally...");
+      try {
+        const base64Url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = error => reject(error);
+        });
+        setStorefrontImage(base64Url);
+        localStorage.setItem("ht_storefront_image", base64Url);
+        try {
+          await setDoc(doc(db, "settings", "global"), { storefrontImage: base64Url }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Could not sync storefront photo base64 to Firestore:", dbErr);
+        }
+        setUploadStatus("Upload successful! (Local base64 fallback)");
+      } catch (localErr) {
+        setUploadStatus(`Upload error: ${err.message || "Please check your server."}`);
+      }
     } finally {
       setIsUploading(false);
     }
@@ -771,8 +1022,13 @@ export default function App() {
   };
   
   const [customPresets, setCustomPresets] = useState<Record<string, string[]>>({});
-  const [displayFloorMode, setDisplayFloorMode] = useState<"DEFAULT" | "DEFAULT_PLUS" | "CUSTOM" | "ALL">("DEFAULT");
-  const [displayFloorSelection, setDisplayFloorSelection] = useState<string[]>([]);
+  const [displayFloorSelection, setDisplayFloorSelection] = useState<string[]>(() => {
+    const saved = localStorage.getItem("ht_display_floor_config");
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e) {}
+    }
+    return Array.from({ length: 25 }, (_, i) => String(131 + i));
+  });
   const [editingPreset, setEditingPreset] = useState<string | null>(null);
   const [editingNumbers, setEditingNumbers] = useState<string[]>([]);
   const [newNumbersInput, setNewNumbersInput] = useState<string>("");
@@ -832,11 +1088,11 @@ export default function App() {
     { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
   ]);
 
-  const [galleryVideos, setGalleryVideos] = useState([
-    { title: "HiTech Emporium Grand Tour", duration: "12:45", views: "1.2k" },
-    { title: "Solar Inverter Installation", duration: "08:20", views: "342" },
-    { title: "HP Laptop Repair Guide", duration: "15:10", views: "890" },
-    { title: "New Printer Setup", duration: "05:30", views: "156" }
+  const [galleryVideos, setGalleryVideos] = useState<VideoGalleryItem[]>([
+    { id: "v1", title: "How to Use the Hublet", description: "Tutorial on navigating the app", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), views: "1.2k" },
+    { id: "v2", title: "Manager's Address", description: "Message from the General Manager", url: "", category: "Manager's Address", timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), views: "342" },
+    { id: "v3", title: "How to Use a Printer", description: "Printer tutorial", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 10).toISOString(), views: "890" },
+    { id: "v4", title: "How to Use Solar", description: "Solar installation and usage", url: "", category: "Installation", timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), views: "156" }
   ]);
   
   // Storage falls back to localStorage if Firestore hasn't provisioned yet
@@ -860,7 +1116,7 @@ export default function App() {
     { id: "d5", title: "460W Solar Panel (Used)", desc: "460W Monocrystalline, Tested", oldPrice: "₦95,000", newPrice: "₦50,000", badge: "BUDGET SOLAR" }
   ]);
   const [managerAvailable, setManagerAvailable] = useState(true);
-  const [bankInfo, setBankInfo] = useState("Zenith Bank • HiTech Distributors • 1012345678");
+  const [bankInfo, setBankInfo] = useState("GTBank, Account: 9006163631, Account Name: HiTech Distributors");
 
   // Receipt Form State
   const [receiptNumber, setReceiptNumber] = useState("");
@@ -972,6 +1228,12 @@ export default function App() {
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  
+  // Video Gallery states
+  const [playingVideo, setPlayingVideo] = useState<VideoGalleryItem | null>(null);
+  const [editingVideo, setEditingVideo] = useState<VideoGalleryItem | null>(null);
+  const [showVideoForm, setShowVideoForm] = useState(false);
+  const [videoSearch, setVideoSearch] = useState("");
 
   // Initialize and ensure Auth
   useEffect(() => {
@@ -1122,15 +1384,13 @@ export default function App() {
         snapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() });
         });
-        if (snapshot.size > 0) {
-          const sortedList = list.sort((a,b) => b.timestamp.localeCompare(a.timestamp));
-          const defaults = [
-            { title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
-            { title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
-            { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
-          ];
-          setGalleryImages([...sortedList, ...defaults]);
-        }
+        const sortedList = list.sort((a,b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+        const defaults = [
+          { title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
+          { title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
+          { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
+        ];
+        setGalleryImages([...sortedList, ...defaults]);
       }, (e) => console.log("gallery_images snapshot error:", e));
 
       onSnapshot(doc(db, "settings", "room_presets"), (docSnap) => {
@@ -1142,7 +1402,6 @@ export default function App() {
       onSnapshot(doc(db, "settings", "display_floor_config"), (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.mode) setDisplayFloorMode(data.mode);
           if (data.selection) setDisplayFloorSelection(data.selection);
         }
       }, (e) => console.log("display_floor_config snapshot error:", e));
@@ -1156,10 +1415,14 @@ export default function App() {
     localStorage.setItem(key, JSON.stringify(data));
   };
 
+  useEffect(() => {
+    localStorage.setItem("ht_display_floor_config", JSON.stringify(displayFloorSelection));
+  }, [displayFloorSelection]);
+
   const displayedProducts = React.useMemo(() => {
     let list: Product[] = [];
     
-    // For Display Floor, we ignore `currentPreset` and use `displayFloorMode`
+    // For Display Floor, we ignore `currentPreset` and use `displayFloorSelection`
     if (currentRoom === "display") {
       const productsMap = new Map<string, Product>();
       products.forEach((p, idx) => {
@@ -1185,20 +1448,7 @@ export default function App() {
       });
 
       let targetNumbers = new Set<string>();
-      
-      const defaultRows = Array.from({ length: 25 }, (_, i) => String(131 + i)); // 131 to 155
-      const allRows = Array.from({ length: 155 }, (_, i) => String(1 + i)); // 1 to 155
-      
-      if (displayFloorMode === "DEFAULT") {
-        defaultRows.forEach(r => targetNumbers.add(r));
-      } else if (displayFloorMode === "DEFAULT_PLUS") {
-        defaultRows.forEach(r => targetNumbers.add(r));
-        displayFloorSelection.forEach(r => targetNumbers.add(r));
-      } else if (displayFloorMode === "CUSTOM") {
-        displayFloorSelection.forEach(r => targetNumbers.add(r));
-      } else if (displayFloorMode === "ALL") {
-        allRows.forEach(r => targetNumbers.add(r));
-      }
+      displayFloorSelection.forEach(r => targetNumbers.add(r));
 
       list = Array.from(targetNumbers).map(numStr => productsMap.get(numStr)).filter(Boolean) as Product[];
       
@@ -1264,7 +1514,7 @@ export default function App() {
     });
 
     return list;
-  }, [products, currentPreset, productOverrides, customPresets, currentRoom, displayFloorMode, displayFloorSelection]);
+  }, [products, currentPreset, productOverrides, customPresets, currentRoom, displayFloorSelection]);
 
 
   const displayedSolarProducts = React.useMemo(() => {
@@ -2000,6 +2250,11 @@ Issue: ${escDesc}`;
             key={preset.id}
             onClick={() => {
               setCurrentPreset(preset.id as any);
+              if (preset.id === "DEFAULT") {
+                setDisplayFloorSelection(Array.from({ length: 25 }, (_, i) => String(131 + i)));
+              } else if (preset.id === "LAST IMPORTED SHEET") {
+                setDisplayFloorSelection(Array.from({ length: 155 }, (_, i) => String(1 + i)));
+              }
             }}
             className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center relative ${currentPreset === preset.id ? "bg-slate-800 shadow-inner " + preset.border : "bg-slate-950 border-slate-800"}`}
           >
@@ -2027,7 +2282,7 @@ Issue: ${escDesc}`;
         {editingPreset && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#1a2a4a]/80 flex items-center justify-center p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[1050] bg-[#1a2a4a]/80 flex items-center justify-center p-4 backdrop-blur-sm"
           >
             <motion.div 
               initial={{ y: 20, scale: 0.95 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, scale: 0.95 }}
@@ -2168,16 +2423,19 @@ Issue: ${escDesc}`;
 
 
           {/* HiTech Distributors Storefront Facade - Styled with a beautiful glowing dark blue border */}
-          <div className="my-6 overflow-hidden rounded-xl border-2 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)] relative max-h-[220px] bg-slate-900 flex justify-center items-center">
+          <div className="my-6 overflow-hidden rounded-xl border-2 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)] relative h-[220px] bg-slate-900 flex justify-center items-center">
             <img
               src={storefrontImage}
               alt="HiTech Distributors Facade"
               referrerPolicy="no-referrer"
-              className="w-full h-[220px] object-contain object-center brightness-95 hover:brightness-100 transition-all duration-300"
+              className="w-full h-full object-cover object-center brightness-95 hover:brightness-100 transition-all duration-300"
               onError={() => {
-                const defaultFallback = "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
-                if (storefrontImage !== defaultFallback) {
-                  setStorefrontImage(defaultFallback);
+                const primaryFallback = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
+                const secondaryFallback = "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80";
+                if (storefrontImage !== primaryFallback) {
+                  setStorefrontImage(primaryFallback);
+                } else {
+                  setStorefrontImage(secondaryFallback);
                 }
               }}
             />
@@ -2210,6 +2468,12 @@ Issue: ${escDesc}`;
             <p className="text-[9px] text-slate-500 font-mono tracking-wider uppercase text-center mt-2">
               {STORE.addr} · {STORE.phone}
             </p>
+            <button 
+              onClick={() => setShowGuide(true)}
+              className="text-blue-500 text-xs font-bold mt-2 hover:text-blue-400 transition-colors"
+            >
+              ℹ️ How to Use the Hublet
+            </button>
           </div>
         </div>
       ) : (
@@ -2218,14 +2482,25 @@ Issue: ${escDesc}`;
           
           {/* 3.4 Topboard - Fixed top bar */}
           <header className="sticky top-0 z-40 w-full bg-[var(--dk)]/95 backdrop-blur-md border-b-4 border-[#1a2a4a] py-3 px-4 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setInStore(false)} className="p-1.5 border border-[#1a2a4a] bg-white text-black hover:bg-[#1a2a4a] hover:text-white transition-colors">
-                <Home className="w-4 h-4" />
+            <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden hide-scrollbar">
+              <button onClick={handleBack} className="h-[44px] px-3 font-bold text-sm flex justify-center items-center bg-white text-[#1a2a4a] border border-[#1a2a4a] rounded shadow-sm hover:bg-slate-100 transition-colors flex-shrink-0 whitespace-nowrap">
+                &larr; Back
               </button>
-              <HitechLogo size="sm" className="ml-1" />
+              <button onClick={() => setInStore(false)} className="h-[44px] w-[44px] flex justify-center items-center border border-[#1a2a4a] bg-white text-black hover:bg-[#1a2a4a] hover:text-white transition-colors rounded flex-shrink-0">
+                <Home className="w-5 h-5" />
+              </button>
+              <div className="flex-shrink-0 min-w-0 hidden sm:block">
+                <HitechLogo size="sm" className="ml-1" />
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button 
+                onClick={() => setShowGuide(true)} 
+                className="h-[44px] px-3 font-bold text-xs flex justify-center items-center bg-blue-50/10 text-blue-400 border border-blue-900/50 rounded shadow-sm hover:bg-blue-900/30 hover:text-blue-300 transition-colors whitespace-nowrap mr-1"
+              >
+                ℹ️ Guide
+              </button>
               <span className="text-[9px] font-mono uppercase tracking-wider bg-[#1a2a4a] text-white px-2.5 py-1 border border-[#1a2a4a] flex items-center gap-1">
                 <span>{currentRoom}</span>
               </span>
@@ -2241,7 +2516,7 @@ Issue: ${escDesc}`;
           </header>
 
           {/* Dynamic Room Content */}
-          <main className="flex-grow p-4 overflow-y-auto max-w-[430px] mx-auto w-full">
+          <main className="content-area flex-grow p-4 overflow-y-auto max-w-[430px] mx-auto w-full">
             
             {/* Showroom Room */}
             {currentRoom === "showroom" && (
@@ -2302,7 +2577,7 @@ Issue: ${escDesc}`;
                       >
                         <div className="flex justify-between items-start w-full">
                           <span className="text-3xl font-serif italic font-light opacity-80">11</span>
-                          <div className="text-amber-500">
+                          <div className="text-[#dc3545]">
                             <Sun className="w-6 h-6 animate-spin" style={{ animationDuration: "10s" }} />
                           </div>
                         </div>
@@ -2344,7 +2619,8 @@ Issue: ${escDesc}`;
                     <SparklesIcon className="w-5 h-5 animate-pulse" />
                   </div>
                   <h3 className="text-[var(--yl)] font-bold mb-1">Display Floor Highlights</h3>
-                  <p className="text-[11px] text-[var(--mu)]">Virtual interactive showroom display stand. Tap any product to view premium live specifications.</p>
+                  <p className="text-[11px] text-[var(--mu)] mb-2">Virtual interactive showroom display stand. Tap any product to view premium live specifications.</p>
+                  <p className="text-[10px] text-white bg-slate-800/50 p-2 rounded border border-slate-700/50 inline-block font-medium">💡 Tap any preset above to change the view.</p>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -2410,14 +2686,14 @@ Issue: ${escDesc}`;
                   ))}
 
                   <div className="h-[2px] bg-slate-800 my-4" />
-                  <p className="text-[10px] uppercase text-amber-500 font-mono tracking-wider">☀ Solar Hub Live Sheet</p>
+                  <p className="text-[10px] uppercase text-[#dc3545] font-mono tracking-wider">☀ Solar Hub Live Sheet</p>
                   
                   {displayedSolarProducts.map(s => (
                     <div key={s.id} className="flex justify-between items-center py-1.5 border-b border-slate-800/40 hover:bg-slate-900/30 px-1 cursor-pointer rounded"
                          onClick={() => setSelectedProduct(s)}>
                       <div className="min-w-0 w-2/3 pr-2">
-                        <p className="font-bold text-xs text-amber-100 truncate">{s.n}</p>
-                        <p className="text-[9px] text-amber-500/80 truncate font-mono">{s.sp}</p>
+                        <p className="font-bold text-xs text-[#1a1a2e] truncate">{s.n}</p>
+                        <p className="text-[9px] text-[#dc3545] truncate font-mono">{s.sp}</p>
                       </div>
                       <div className="price w-1/3 text-right font-mono font-bold text-[#1a1a2e] text-xs">
                         {getDisplayPrice(s)}
@@ -2433,29 +2709,6 @@ Issue: ${escDesc}`;
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to the Gallery! Browse through our product images to get a feel for what HiTech Distributors offers. Click any image to learn more. Prices are shown below each image to give you a quick reference. Enjoy exploring!" />
                 
-                {/* Mockup Gallery Section */}
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)] mb-2">
-                  <h3 className="text-white font-bold text-lg flex items-center gap-2 mb-4">
-                    <Camera className="w-5 h-5 text-blue-400" /> HiTech Product Showcase
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {MOCKUP_GALLERY_IMAGES.map((mockup, idx) => (
-                      <div key={idx} className="bg-white rounded-lg overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-shadow group flex flex-col">
-                        <div className="h-48 overflow-hidden bg-slate-50 relative">
-                          <img src={mockup.img} alt={mockup.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                          <div className="absolute top-2 left-2 bg-blue-600 text-white text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
-                            {mockup.category}
-                          </div>
-                        </div>
-                        <div className="p-3 flex flex-col flex-1 border-t border-slate-100">
-                          <h4 className="text-sm font-bold text-slate-900 mb-1 leading-tight">{mockup.title}</h4>
-                          <p className="text-[10px] text-slate-500 leading-relaxed mt-auto">{mockup.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
                 <PresetSelector />
                 <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
                   <h3 className="text-blue-400 font-bold text-base flex items-center gap-2">
@@ -2482,6 +2735,52 @@ Issue: ${escDesc}`;
                       }
                     }}
                   />
+                </div>
+
+                {/* Showroom Walkthrough Gallery displaying real-time Firestore galleryImages */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
+                  <h3 className="text-white font-bold text-sm mb-3 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-emerald-400" /> Showroom Walkthroughs & Uploads
+                  </h3>
+                  
+                  {galleryImages && galleryImages.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {galleryImages.map((img: any, idx) => (
+                        <div key={img.id || idx} className="bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col relative group">
+                          <div className="h-44 bg-slate-900 flex items-center justify-center overflow-hidden relative">
+                            <img src={img.url} alt={img.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                            {img.id && (
+                              <button 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Are you sure you want to delete this walkthrough photo?")) {
+                                    try {
+                                      await deleteDoc(doc(db, "gallery_images", img.id));
+                                    } catch (err) {
+                                      handleFirestoreError(err, OperationType.DELETE, `gallery_images/${img.id}`);
+                                    }
+                                  }
+                                }}
+                                className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-full shadow transition-colors z-10"
+                                title="Delete Photo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="p-3 flex flex-col flex-grow bg-slate-950 text-slate-100">
+                            <h4 className="font-bold text-xs text-white leading-tight mb-1">{img.title}</h4>
+                            <p className="text-[10px] text-slate-400 leading-relaxed">{img.caption}</p>
+                            <span className="text-[8px] font-mono text-slate-500 mt-2">
+                              {img.timestamp ? new Date(img.timestamp).toLocaleDateString() : "Preset Walkthrough"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">No custom walkthrough photos uploaded yet.</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -2519,45 +2818,192 @@ Issue: ${escDesc}`;
             {/* Video Gallery Room */}
             {currentRoom === "video" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
-                <Teleprompter text="Welcome to the Video Gallery! Watch product demos, staff introductions, and tutorials. Click any video to play and learn more about our products and services." />
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
-                  <h3 className="text-red-500 font-bold text-base flex items-center gap-2">
-                    <Video className="w-5 h-5" /> Installation & Video Reviews
-                  </h3>
-                  <p className="text-xs text-[var(--mu)] mb-3">In-depth installation videos, customer feedback, and quick product overviews.</p>
-                  
-                  <div className="flex gap-2">
-                    <input type="text" placeholder="🔍 Search video library..." className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2 outline-none" />
+                <Teleprompter text="Welcome to the Video Gallery! Watch product demos, staff introductions, and tutorials. Click any video to play." />
+                
+                {/* Header & Controls */}
+                <div className="flex justify-between items-center bg-slate-900 p-4 rounded-xl border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <Video className="w-6 h-6 text-red-500" />
+                    <div>
+                      <h3 className="text-white font-bold text-sm">VIDEO GALLERY</h3>
+                      <p className="text-xs text-slate-400">Demos, tutorials, and more</p>
+                    </div>
                   </div>
-                  
-                  <div className="mt-2">
-                    <MediaUploadButton 
-                      type="video" 
-                      label="Upload Video" 
-                      onUploadSuccess={(url) => {
-                        setGalleryVideos(prev => [{ title: "New Video Upload", duration: "00:00", views: "0", url }, ...prev]);
-                      }}
-                    />
+                  <div className="flex gap-2">
+                    {staffIsLoggedIn && (
+                      <button 
+                        onClick={() => {
+                          setEditingVideo(null);
+                          setShowVideoForm(true);
+                        }}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Add Video
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {galleryVideos.map((vid, i) => (
-                    <div key={i} className="rounded-xl overflow-hidden border border-slate-800 bg-[var(--dk2)] shadow-lg cursor-pointer hover:border-slate-600 group">
-                      <div className="w-full h-24 bg-slate-950 flex items-center justify-center relative overflow-hidden">
-                        {vid.url ? (
-                          <video src={vid.url} className="w-full h-full object-cover opacity-60" />
-                        ) : (
-                          <Video className="w-8 h-8 text-slate-700 group-hover:scale-110 transition-transform" />
-                        )}
-                        <span className="absolute bottom-1 right-1 text-[8px] bg-[#1a2a4a]/80 text-white px-1 rounded font-mono">{vid.duration}</span>
+                {/* Search */}
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input 
+                    type="text" 
+                    placeholder="Search videos by title or category..." 
+                    value={videoSearch}
+                    onChange={(e) => setVideoSearch(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 text-sm text-white rounded-lg pl-9 p-3 outline-none focus:border-red-500/50 transition-colors" 
+                  />
+                </div>
+
+                {/* Video Form (Staff Only) */}
+                {staffIsLoggedIn && showVideoForm && (
+                  <div className="p-4 bg-slate-900 border border-emerald-900/30 rounded-xl flex flex-col gap-3">
+                    <h4 className="font-bold text-emerald-400 text-xs uppercase flex justify-between items-center">
+                      <span>{editingVideo ? "✏️ Edit Video" : "➕ Add New Video"}</span>
+                      <button onClick={() => setShowVideoForm(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                    </h4>
+                    
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.currentTarget);
+                        const newVideo: VideoGalleryItem = {
+                          id: editingVideo ? editingVideo.id : `vid_${Date.now()}`,
+                          title: fd.get("title") as string,
+                          description: fd.get("description") as string,
+                          url: fd.get("url") as string,
+                          thumbnailUrl: fd.get("thumbnailUrl") as string,
+                          category: fd.get("category") as string,
+                          timestamp: editingVideo ? editingVideo.timestamp : new Date().toISOString(),
+                          views: editingVideo ? editingVideo.views : "0"
+                        };
+                        
+                        if (editingVideo) {
+                          setGalleryVideos(prev => prev.map(v => v.id === editingVideo.id ? newVideo : v));
+                        } else {
+                          setGalleryVideos(prev => [newVideo, ...prev]);
+                        }
+                        
+                        setShowVideoForm(false);
+                        setEditingVideo(null);
+                        
+                        // Sync to Firestore if needed
+                        try {
+                          setDoc(doc(db, "settings", "galleryVideos"), { videos: editingVideo ? galleryVideos.map(v => v.id === editingVideo.id ? newVideo : v) : [newVideo, ...galleryVideos] }, { merge: true });
+                        } catch (err) {
+                          console.warn("Could not sync videos to Firestore:", err);
+                        }
+                      }}
+                      className="flex flex-col gap-3"
+                    >
+                      <input name="title" defaultValue={editingVideo?.title} required placeholder="Video Title *" className="w-full bg-slate-950 border border-slate-800 p-2 text-xs rounded text-white" />
+                      <textarea name="description" defaultValue={editingVideo?.description} placeholder="Video Description (Optional)" className="w-full bg-slate-950 border border-slate-800 p-2 text-xs rounded text-white min-h-[60px]" />
+                      <input name="url" defaultValue={editingVideo?.url} required placeholder="Video URL (YouTube, Vimeo, MP4) *" className="w-full bg-slate-950 border border-slate-800 p-2 text-xs rounded text-white font-mono" />
+                      
+                      <div className="flex gap-2">
+                        <input name="thumbnailUrl" defaultValue={editingVideo?.thumbnailUrl} placeholder="Thumbnail Image URL (Optional)" className="flex-1 bg-slate-950 border border-slate-800 p-2 text-xs rounded text-white font-mono" />
+                        <select name="category" defaultValue={editingVideo?.category || "Tutorial"} className="w-[140px] bg-slate-950 border border-slate-800 p-2 text-xs rounded text-white">
+                          <option value="Tutorial">Tutorial</option>
+                          <option value="Demo">Demo</option>
+                          <option value="Manager's Address">Manager's Address</option>
+                          <option value="Installation">Installation</option>
+                          <option value="Maintenance">Maintenance</option>
+                          <option value="General">General</option>
+                        </select>
                       </div>
-                      <div className="p-2">
-                        <h4 className="font-bold text-[10px] text-[var(--yl)] leading-tight mb-1 line-clamp-2">{vid.title}</h4>
-                        <p className="text-[8px] text-[var(--mu)] font-mono">{vid.views} views</p>
+
+                      <div className="flex gap-2 pt-2">
+                        <button type="submit" className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold uppercase tracking-wider">
+                          {editingVideo ? "Update Video" : "Save Video"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
+                {/* Video Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {galleryVideos
+                    .filter(v => 
+                      v.title.toLowerCase().includes(videoSearch.toLowerCase()) || 
+                      v.category.toLowerCase().includes(videoSearch.toLowerCase())
+                    )
+                    .map((vid) => (
+                    <div key={vid.id} className="rounded-xl overflow-hidden border border-slate-800 bg-slate-900 shadow-lg group flex flex-col">
+                      <div 
+                        className="w-full h-36 bg-slate-950 flex items-center justify-center relative overflow-hidden cursor-pointer"
+                        onClick={() => setPlayingVideo(vid)}
+                      >
+                        {vid.thumbnailUrl ? (
+                          <img src={vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100" />
+                        ) : (
+                          <div className="w-full h-full bg-slate-900 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                            <Video className="w-10 h-10 text-slate-700" />
+                          </div>
+                        )}
+                        
+                        {/* Play Button Overlay */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-transparent transition-colors">
+                          <div className="w-12 h-12 bg-red-600/90 text-white rounded-full flex items-center justify-center pl-1 shadow-lg backdrop-blur-sm group-hover:scale-110 group-hover:bg-red-500 transition-all">
+                            <Play className="w-5 h-5 fill-current" />
+                          </div>
+                        </div>
+                        
+                        <span className="absolute top-2 left-2 text-[9px] bg-[#1a2a4a] text-white px-2 py-0.5 rounded font-mono uppercase tracking-wider border border-blue-900/50">
+                          {vid.category}
+                        </span>
+                      </div>
+                      
+                      <div className="p-3 flex flex-col flex-grow">
+                        <h4 className="font-bold text-sm text-white leading-tight mb-1">{vid.title}</h4>
+                        <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed mb-2 flex-grow">{vid.description}</p>
+                        
+                        <div className="flex justify-between items-end mt-auto pt-2 border-t border-slate-800">
+                          <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1">
+                            📅 {new Date(vid.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </span>
+                          
+                          {staffIsLoggedIn && (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setEditingVideo(vid); setShowVideoForm(true); }}
+                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  if (confirm("Delete this video?")) {
+                                    const newVids = galleryVideos.filter(v => v.id !== vid.id);
+                                    setGalleryVideos(newVids);
+                                    try {
+                                      setDoc(doc(db, "settings", "galleryVideos"), { videos: newVids }, { merge: true });
+                                    } catch (err) {}
+                                  }
+                                }}
+                                className="p-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
+                  
+                  {galleryVideos.filter(v => 
+                      v.title.toLowerCase().includes(videoSearch.toLowerCase()) || 
+                      v.category.toLowerCase().includes(videoSearch.toLowerCase())
+                    ).length === 0 && (
+                    <div className="col-span-1 sm:col-span-2 text-center py-12 bg-slate-900/50 border border-slate-800 rounded-xl border-dashed">
+                      <Video className="w-10 h-10 text-slate-600 mx-auto mb-3 opacity-50" />
+                      <p className="text-slate-400 text-sm font-medium">No videos found</p>
+                      <p className="text-slate-500 text-xs mt-1">Try a different search term or add a new video.</p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -2724,8 +3170,8 @@ Issue: ${escDesc}`;
                             
                             <div className="border-t-2 border-[#1a1a2e] pt-3 mt-3 flex flex-col gap-1 text-[11px]">
                               <p className="font-bold">Payment Instructions:</p>
-                              <p>Bank: {bankInfo}</p>
-                              <p className="italic text-slate-600 mt-1">Please transfer the total amount and send payment confirmation to Sales & Orders.</p>
+                              <p>Please transfer the total amount to {bankInfo}</p>
+                              <p className="italic text-slate-600 mt-1">Send payment confirmation to Sales & Orders after transferring.</p>
                             </div>
                             
                             <div className="border-t border-dashed border-slate-300 pt-3 mt-1 text-center font-bold">
@@ -3107,7 +3553,7 @@ Issue: ${escDesc}`;
                 <Teleprompter text="Welcome to the Solar Hub! Explore our advanced hybrid backup installations, battery banks, and solar panel arrays." />
                 <div className="p-6 bg-[#1a2a4a] border-4 border-[#1a2a4a] shadow-[8px_8px_0px_0px_rgba(26,42,74,1)]">
                   <h3 className="text-white font-black text-2xl uppercase tracking-tighter flex items-center gap-2 mb-2">
-                    <Sun className="w-6 h-6 text-amber-500" /> Solar Infrastructure
+                    <Sun className="w-6 h-6 text-[#dc3545]" /> Solar Infrastructure
                   </h3>
                   <p className="text-xs font-mono uppercase tracking-widest text-slate-400">Configure hybrid backup installations, batteries, panels, and chargers.</p>
                 </div>
@@ -3407,7 +3853,8 @@ Issue: ${escDesc}`;
                       placeholder="Paste CSV rows from Google Sheets (e.g. P/N,Category,Name,Spec,Price,Description,Promo,New)"
                       value={csvText}
                       onChange={(e) => setCsvText(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2 outline-none font-mono text-[10px] w-full"
+                      className="border border-slate-800 text-xs rounded-lg p-2 outline-none font-mono text-[10px] w-full"
+                      style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
                     />
                     <div className="flex gap-2">
                       <button onClick={handleCsvImport} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
@@ -3437,7 +3884,8 @@ Issue: ${escDesc}`;
                     placeholder="🔍 Search full spreadsheet data..."
                     value={sheetSearch}
                     onChange={(e) => setSheetSearch(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-3 outline-none"
+                    className="w-full border border-slate-800 text-xs rounded-lg p-3 outline-none"
+                    style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
                   />
                   <div className="flex gap-2">
                     <button className="flex-1 py-2 bg-slate-800 rounded border border-slate-700 text-[10px] font-bold text-white uppercase tracking-wider">
@@ -3464,43 +3912,16 @@ Issue: ${escDesc}`;
                   </h3>
                   
                   <div className="flex flex-col gap-4">
-                    <div>
-                      <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-2 block">Mode:</label>
-                      <div className="flex gap-2">
-                        {(["DEFAULT", "DEFAULT_PLUS", "CUSTOM", "ALL"] as const).map(mode => (
-                          <button
-                            key={mode}
-                            onClick={() => setDisplayFloorMode(mode)}
-                            className={`flex-1 py-2 rounded text-[10px] font-bold uppercase transition-colors ${
-                              displayFloorMode === mode 
-                                ? "bg-blue-600 text-white border border-blue-500" 
-                                : "bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-600"
-                            }`}
-                          >
-                            {mode.replace("_", " + ")}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
                     <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
                       <p className="text-sm font-bold text-white mb-1">
-                        Selected Products: {
-                          displayFloorMode === "DEFAULT" ? 25 :
-                          displayFloorMode === "ALL" ? 155 :
-                          displayFloorMode === "DEFAULT_PLUS" ? 25 + displayFloorSelection.length :
-                          displayFloorSelection.length
-                        } out of 155
+                        Selected Products: {displayFloorSelection.length} out of 155
                       </p>
-                      {displayFloorMode === "DEFAULT_PLUS" && (
-                        <p className="text-[10px] text-[var(--mu)] font-mono">(25 from DEFAULT + {displayFloorSelection.length} additional)</p>
-                      )}
                     </div>
                     
                     <div className="flex gap-2">
                       <button 
                         onClick={async () => {
-                          const conf = { mode: displayFloorMode, selection: displayFloorSelection };
+                          const conf = { selection: displayFloorSelection };
                           try {
                             await setDoc(doc(db, "settings", "display_floor_config"), conf, { merge: true });
                             setCsvStatus("✅ Display Floor Selection Saved!");
@@ -3563,33 +3984,26 @@ Issue: ${escDesc}`;
                       <tbody className="text-[10px] text-slate-300">
                         {products.filter(p => !sheetSearch || p.n.toLowerCase().includes(sheetSearch.toLowerCase()) || p.pn?.toLowerCase().includes(sheetSearch.toLowerCase())).map((p, index) => {
                           const rowNum = String(p.displayOrder || index + 1);
-                          const isDefaultLocked = parseInt(rowNum) >= 131 && parseInt(rowNum) <= 155;
                           const isSelected = displayFloorSelection.includes(rowNum);
 
                           return (
                             <tr key={p.id} onClick={() => setEditingProduct(p)} className="border-b border-slate-800/50 hover:bg-slate-800/30 group cursor-pointer">
                               <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                                {isDefaultLocked ? (
-                                  <div className="flex items-center gap-1 text-slate-500 font-bold bg-slate-800/50 px-2 py-1 rounded">
-                                    <Lock className="w-3 h-3" /> DEFAULT
-                                  </div>
-                                ) : (
-                                  <label className="flex items-center gap-2 cursor-pointer bg-slate-900 hover:bg-slate-800 border border-slate-700 px-2 py-1 rounded transition-colors" onClick={(e) => e.stopPropagation()}>
-                                    <input 
-                                      type="checkbox"
-                                      className="accent-blue-500"
-                                      checked={isSelected}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setDisplayFloorSelection(prev => [...prev, rowNum]);
-                                        } else {
-                                          setDisplayFloorSelection(prev => prev.filter(r => r !== rowNum));
-                                        }
-                                      }}
-                                    />
-                                    <span className="font-bold text-blue-400">ADD TO DEFAULT</span>
-                                  </label>
-                                )}
+                                <label className="flex items-center gap-2 cursor-pointer bg-slate-900 hover:bg-slate-800 border border-slate-700 px-2 py-1 rounded transition-colors">
+                                  <input 
+                                    type="checkbox"
+                                    className="accent-blue-500 w-4 h-4"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setDisplayFloorSelection(prev => [...prev, rowNum]);
+                                      } else {
+                                        setDisplayFloorSelection(prev => prev.filter(r => r !== rowNum));
+                                      }
+                                    }}
+                                  />
+                                  <span className={`font-bold ${isSelected ? 'text-emerald-400' : 'text-slate-400'}`}>SHOW</span>
+                                </label>
                               </td>
                               <td className="p-3 font-mono">{rowNum}</td>
                             <td className="p-3">{p.brand}</td>
@@ -3640,7 +4054,7 @@ Issue: ${escDesc}`;
 
             {/* Modal for editing product */}
             {editingProduct && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1a2a4a]/80 backdrop-blur-sm">
+              <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-[#1a2a4a]/80 backdrop-blur-sm">
                 <div className="bg-slate-900 border border-[var(--border)] rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
                   <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
                     <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
@@ -3652,7 +4066,7 @@ Issue: ${escDesc}`;
                   </div>
                   <div className="p-4 overflow-y-auto flex flex-col gap-3 flex-grow">
                     {[
-                      { label: "Display Order", val: products.findIndex(p => p.id === editingProduct.id) + 1 },
+                      { label: "No.", val: products.findIndex(p => p.id === editingProduct.id) + 1 },
                       { label: "Brand", val: editingProduct.n.split(" ")[0] },
                       { label: "Product Code", val: editingProduct.pn || "" },
                       { label: "Category", val: editingProduct.cat },
@@ -3668,7 +4082,8 @@ Issue: ${escDesc}`;
                         <input
                           type="text"
                           defaultValue={field.val}
-                          className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono"
+                          className="w-full border border-slate-800 text-xs rounded-lg p-2.5 outline-none font-mono"
+                          style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
                         />
                       </div>
                     ))}
@@ -3969,7 +4384,7 @@ Issue: ${escDesc}`;
                           alt="Thumbnail" 
                           className="w-16 h-12 object-cover rounded border border-slate-800 bg-slate-900 shrink-0"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = "https://storage.googleapis.com/aistudio-data/b/ai-studio-417102.appspot.com/o/2026%2F06%2F26%2Fb6ee9fec-46ce-4009-8687-f74f762020e5%2Fhitech_emporium.jpg?alt=media&token=c413b5ee-8260-449e-ba60-398d578b8a53";
+                            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
                           }}
                         />
                         <div className="flex-grow flex flex-col gap-1">
@@ -4702,8 +5117,8 @@ Issue: ${escDesc}`;
                       {/* Product 1 */}
                       <div className="flex-1 flex flex-col p-3 w-1/2">
                         <div className="h-[120px] bg-[#ffffff] border border-[#e8f0fe] rounded shadow-sm mb-3 flex items-center justify-center p-2 relative">
-                          {compareProduct1.imgFront || compareProduct1.imgManual ? (
-                            <img src={compareProduct1.imgManual || compareProduct1.imgFront} alt={compareProduct1.n} className="w-full h-full object-contain" />
+                          {(compareProduct1.imgFront || compareProduct1.imgManual || compareProduct1.imgSide || compareProduct1.imgBack || compareProduct1.imgTop) ? (
+                            <img src={compareProduct1.imgFront || compareProduct1.imgManual || compareProduct1.imgSide || compareProduct1.imgBack || compareProduct1.imgTop} alt={compareProduct1.n} className="w-full h-full object-contain" />
                           ) : (
                             <Box className="w-10 h-10 text-slate-300" />
                           )}
@@ -4728,8 +5143,8 @@ Issue: ${escDesc}`;
                       {/* Product 2 */}
                       <div className="flex-1 flex flex-col p-3 w-1/2">
                         <div className="h-[120px] bg-[#ffffff] border border-[#e8f0fe] rounded shadow-sm mb-3 flex items-center justify-center p-2 relative">
-                          {compareProduct2.imgFront || compareProduct2.imgManual ? (
-                            <img src={compareProduct2.imgManual || compareProduct2.imgFront} alt={compareProduct2.n} className="w-full h-full object-contain" />
+                          {(compareProduct2.imgFront || compareProduct2.imgManual || compareProduct2.imgSide || compareProduct2.imgBack || compareProduct2.imgTop) ? (
+                            <img src={compareProduct2.imgFront || compareProduct2.imgManual || compareProduct2.imgSide || compareProduct2.imgBack || compareProduct2.imgTop} alt={compareProduct2.n} className="w-full h-full object-contain" />
                           ) : (
                             <Box className="w-10 h-10 text-slate-300" />
                           )}
@@ -4784,7 +5199,7 @@ Issue: ${escDesc}`;
           </main>
 
           {/* 3.5 Bottom Navigation - Fixed bottom bar */}
-          <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-[#1a2a4a] overflow-x-auto">
+          <nav className="navbar bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-[#1a2a4a] overflow-x-auto">
             <div className="flex justify-between items-center px-2 py-1 max-w-[430px] mx-auto min-w-[430px]">
               {[
                 { id: "gallery", label: "Gallery", icon: <Camera className="w-4 h-4" /> },
@@ -4820,12 +5235,174 @@ Issue: ${escDesc}`;
         </div>
       )}
 
+      {showGuide && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl text-white">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950 rounded-t-2xl">
+              <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2 text-white">
+                ℹ️ How to Use the Hublet
+              </h3>
+              <button onClick={() => setShowGuide(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto flex flex-col gap-6 flex-grow text-sm hide-scrollbar">
+              <section>
+                <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">📍 CUSTOMER ADVICE — Where to Start</h4>
+                <ul className="flex flex-col gap-3">
+                  <li className="leading-relaxed text-slate-300">
+                    <strong className="text-white">BEST WAY TO START: DISPLAY FLOOR 🏪</strong> — Shows what is physically on display in the store. Every item shown here is available and on the shop floor. This is the cooler way to start.
+                  </li>
+                  <li className="leading-relaxed text-slate-300">
+                    <strong className="text-white">💡 USING PRESETS</strong> — Tap any preset button (like DEFAULT or LAST IMPORTED SHEET) at the top of the rooms to change the view. DEFAULT shows our featured products.
+                  </li>
+                  <li className="leading-relaxed text-slate-300">
+                    <strong className="text-white">FOR THE FULL CATALOGUE & TO PLACE AN ORDER: SHOWROOM 🛒</strong> — Browse by category, tap "Add to Order" to select items, selected items go directly to ORDERS & INVOICING.
+                  </li>
+                  <li className="leading-relaxed text-slate-300">
+                    <strong className="text-white">TO VIEW PRODUCT IMAGES: GALLERY 🖼️</strong> — Shows pictures of products and office photos.
+                  </li>
+                  <li className="leading-relaxed text-slate-300">
+                    <strong className="text-white">TO LEARN & EXPLORE: VIDEO GALLERY 🎬</strong> — Videos include: Manager's Address, How to Use the Hublet, Product Demos, Product Installation (how to mount and set up), Product Maintenance (how to maintain and care), Product Assembly (how to put together and dismantle).
+                  </li>
+                </ul>
+              </section>
+
+              <section>
+                <h4 className="text-blue-400 font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">📱 NAVIGATION</h4>
+                <p className="text-slate-300">Use the buttons at the <strong className="text-white">BOTTOM</strong> of the screen to switch between rooms.</p>
+              </section>
+
+              <section>
+                <h4 className="text-amber-400 font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">🔼 IMPORTANT: SCROLL UP</h4>
+                <p className="text-slate-300">If you don't see the button you need, <strong className="text-amber-400">SCROLL UP</strong>. If the keyboard covers the button, <strong className="text-amber-400">SCROLL UP</strong>.</p>
+              </section>
+
+              <section>
+                <h4 className="text-white font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">🔙 BACK BUTTON</h4>
+                <p className="text-slate-300">Tap the <strong className="text-white">"← Back"</strong> button at the top-left to go back to the previous page.</p>
+              </section>
+
+              <section>
+                <h4 className="text-purple-400 font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">🏠 ROOMS OVERVIEW</h4>
+                <ol className="list-decimal pl-5 flex flex-col gap-2 text-slate-300 marker:text-purple-400 marker:font-bold text-xs">
+                  <li><strong className="text-white">Display Floor 🏪</strong> — Quick view of products on display. Start here.</li>
+                  <li><strong className="text-white">Showroom 🛒</strong> — Full catalogue by category. Browse all products.</li>
+                  <li><strong className="text-white">Orders & Invoicing 📋</strong> — Review selected items and generate invoice.</li>
+                  <li><strong className="text-white">Compare Room 📊</strong> — Compare up to 2 products side-by-side.</li>
+                  <li><strong className="text-white">Hot Deals 🔥</strong> — Promotional and discounted products.</li>
+                  <li><strong className="text-white">Price List 📊</strong> — Full product catalogue with all prices.</li>
+                  <li><strong className="text-white">Gallery 🖼️</strong> — Browse product images and office photos.</li>
+                  <li><strong className="text-white">Video Gallery 🎬</strong> — Watch product demos and tutorials.</li>
+                  <li><strong className="text-white">Channels 📱</strong> — Connect with us on social media.</li>
+                  <li><strong className="text-white">Operational Desk 🛎️</strong> — Contact our team for support.</li>
+                  <li><strong className="text-white">Diagnostics Desk 🔧</strong> — Submit repair requests.</li>
+                  <li><strong className="text-white">AI Support 🤖</strong> — Ask questions about products or orders.</li>
+                  <li><strong className="text-white">GM Contact ⭐</strong> — Escalate major issues to General Manager.</li>
+                  <li><strong className="text-white">Client Feedback 📝</strong> — Send us your feedback.</li>
+                  <li><strong className="text-white">Pickup Scheduler 📅</strong> — Schedule time to collect orders.</li>
+                </ol>
+              </section>
+
+              <section>
+                <h4 className="text-slate-400 font-bold mb-3 uppercase tracking-wider text-xs border-b border-slate-800 pb-2">💡 ADDITIONAL TIPS</h4>
+                <ul className="flex flex-col gap-2 text-slate-300 list-disc pl-5 text-xs">
+                  <li>Tap 🔒 to access staff controls (staff only)</li>
+                  <li>Tap 💬 AI Support to ask questions</li>
+                  <li>Use the search bar to find products quickly</li>
+                </ul>
+              </section>
+            </div>
+            
+            <div className="p-4 border-t border-slate-800 bg-slate-950 rounded-b-2xl flex gap-3 shrink-0">
+              <button 
+                onClick={() => {
+                  setShowGuide(false);
+                  if (!inStore) {
+                    setInStore(true);
+                    _setCurrentRoom("showroom");
+                  }
+                }} 
+                className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-bold text-white uppercase tracking-wider transition-colors shadow-lg shadow-blue-900/20"
+              >
+                🚪 Enter the Hublet
+              </button>
+              <button 
+                onClick={() => setShowGuide(false)} 
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm font-bold text-white uppercase tracking-wider transition-colors border border-slate-700"
+              >
+                ✖ Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Playback Modal */}
+      {playingVideo && (
+        <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl w-full max-w-4xl flex flex-col shadow-2xl overflow-hidden relative">
+            <button 
+              onClick={() => setPlayingVideo(null)} 
+              className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/50 hover:bg-red-600 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-sm border border-white/10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="w-full aspect-video bg-black flex items-center justify-center relative">
+              {playingVideo.url.includes("youtube.com") || playingVideo.url.includes("youtu.be") ? (
+                <iframe 
+                  src={`https://www.youtube.com/embed/${playingVideo.url.includes("v=") ? playingVideo.url.split("v=")[1].split("&")[0] : playingVideo.url.split("/").pop()}?autoplay=1`} 
+                  className="w-full h-full border-0" 
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                  allowFullScreen
+                ></iframe>
+              ) : playingVideo.url.includes("vimeo.com") ? (
+                <iframe 
+                  src={`https://player.vimeo.com/video/${playingVideo.url.split("/").pop()}?autoplay=1`} 
+                  className="w-full h-full border-0" 
+                  allow="autoplay; fullscreen; picture-in-picture" 
+                  allowFullScreen
+                ></iframe>
+              ) : (
+                <video 
+                  src={playingVideo.url} 
+                  controls 
+                  autoPlay 
+                  className="w-full h-full outline-none"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              )}
+            </div>
+            
+            <div className="p-5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-red-900/50 text-red-300 border border-red-800 px-2 py-0.5 rounded font-mono uppercase tracking-wider">
+                  {playingVideo.category}
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  📅 {new Date(playingVideo.timestamp).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-white leading-tight">{playingVideo.title}</h2>
+              {playingVideo.description && (
+                <p className="text-sm text-slate-400 mt-2 leading-relaxed">{playingVideo.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Slide-Up Product Detail Overlay */}
       <ProductDetailOverlay 
         selectedProduct={selectedProduct} 
         setSelectedProduct={setSelectedProduct}
         products={products}
         setProducts={setProducts}
+        solarProducts={solarProducts}
+        setSolarProducts={setSolarProducts}
         getDisplayPrice={getDisplayPrice}
         addToCart={addToCart}
         WA_SALES={WA_SALES}
