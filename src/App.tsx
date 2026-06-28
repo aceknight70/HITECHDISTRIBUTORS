@@ -1270,9 +1270,7 @@ export default function App() {
         snapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() } as any);
         });
-        if (list.length > 0) {
-          setRepairs(list.sort((a,b) => b.submittedAt.localeCompare(a.submittedAt)));
-        }
+        setRepairs(list.sort((a,b) => b.submittedAt.localeCompare(a.submittedAt)));
       }, (e) => console.log("repairs snapshot error:", e));
 
       onSnapshot(collection(db, "gm_requests"), (snapshot) => {
@@ -1724,10 +1722,20 @@ Please confirm receipt of this invoice.`;
 
     setSubmittingRepair(true);
 
-    const refCode = `RPR-${Math.floor(100 + Math.random() * 900)}`;
+    // Generate unique daily sequential ticket ID (e.g. RPR-2026-06-28-001)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const todayPrefix = `RPR-${dateStr}`;
+
+    const todayCount = repairs.filter(r => r.ref && r.ref.startsWith(todayPrefix)).length;
+    const seq = String(todayCount + 1).padStart(3, '0');
+    const refCode = `${todayPrefix}-${seq}`;
 
     const newRepair: RepairSubmission = {
-      id: "REP-" + Date.now().toString().slice(-6),
+      id: refCode,
       name: repairCustName,
       phone: repairCustPhone,
       email: repairCustEmail,
@@ -1740,17 +1748,23 @@ Please confirm receipt of this invoice.`;
       submittedAt: new Date().toISOString(),
     };
 
-    // Save
+    // Save with unique document ID to prevent overwriting
     try {
-      await addDoc(collection(db, "repairs"), newRepair);
-    } catch (e) {
+      await setDoc(doc(db, "repairs", refCode), newRepair);
+    } catch (err) {
+      console.warn("Firebase save failed for repair, falling back to local list:", err);
       const updatedList = [newRepair, ...repairs];
       setRepairs(updatedList);
       saveLocal("ht_repairs", updatedList);
     }
 
-    // Send WhatsApp notification to Ruth
-    const waText = `New Repair Request!\nRef: ${refCode}\nCustomer: ${repairCustName}\nPhone: ${repairCustPhone}\nProduct: ${repairProductName} (${repairModelSerial})\nProblem: ${repairProblem}\nMethod: ${repairMethod}`;
+    // Send separate, clean WhatsApp notification to Ruth
+    const waText = `🔧 New Repair Ticket #${refCode} from ${repairCustName}
+Product: ${repairProductName}
+Model/Serial: ${repairModelSerial}
+Fault Description: ${repairProblem}
+Preferred Pickup Method: ${repairMethod}
+Contact Phone: ${repairCustPhone}`;
     const link = `https://wa.me/2348034832773?text=${encodeURIComponent(waText)}`;
     window.open(link, "_blank");
 
@@ -1767,7 +1781,10 @@ Please confirm receipt of this invoice.`;
     setRepairMethod("In-Store");
     setSubmittingRepair(false);
 
-    setRepairSuccess(`Your repair ticket #${refCode} has been received. Our repairs team (Ruth) will contact you within 24 hours.`);
+    // Set Track Ref to the generated ticket for easy subsequent check
+    setTrackRef(refCode);
+
+    setRepairSuccess(`✅ Your repair ticket #${refCode} has been received. Our repairs team (Ruth) will contact you within 24 hours.`);
   };
 
   // Track My Repair
@@ -2117,11 +2134,22 @@ Issue: ${escDesc}`;
   };
 
   // Staff Room login authentication
-  const handleStaffLogin = (e: React.FormEvent) => {
+  const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStaffError("");
     if (staffPIN === "12345" || staffPIN === "qw123#@") {
       setStaffIsLoggedIn(true);
+      if (auth.currentUser) {
+        try {
+          await setDoc(doc(db, "admins", auth.currentUser.uid), {
+            role: staffPIN === "qw123#@" ? "manager" : "staff",
+            timestamp: new Date().toISOString()
+          });
+          console.log("Successfully elevated client uid in Firestore admins.");
+        } catch (dbErr) {
+          console.error("Failed to sync admin privilege in Firestore:", dbErr);
+        }
+      }
     } else {
       setStaffError("Invalid Access PIN or Manager Key.");
     }

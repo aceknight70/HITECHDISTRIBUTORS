@@ -35,11 +35,13 @@ service cloud.firestore {
 
     function isValidRepair(data) {
       return data.id is string && data.id.size() <= 64
-        && data.type is string && data.type.size() <= 32
-        && data.brand is string && data.brand.size() <= 128
-        && data.problem is string && data.problem.size() <= 1000
         && data.name is string && data.name.size() <= 128
         && data.phone is string && data.phone.size() <= 32
+        && (!data.keys().hasAll(['email']) || data.email is string)
+        && data.productName is string && data.productName.size() <= 128
+        && (!data.keys().hasAll(['modelSerial']) || data.modelSerial is string)
+        && data.problem is string && data.problem.size() <= 1000
+        && (!data.keys().hasAll(['method']) || data.method is string)
         && data.ref is string && data.ref.size() <= 32
         && data.status in ['Received', 'Diagnosed', 'Sent Away', 'In Repair', 'Returned', 'Ready for Pickup']
         && (!data.keys().hasAll(['aiComplexity']) || data.aiComplexity is string)
@@ -48,8 +50,8 @@ service cloud.firestore {
     }
 
     function hasValidRepairKeys(data) {
-      return data.keys().hasAll(['id', 'type', 'brand', 'problem', 'name', 'phone', 'status', 'submittedAt'])
-        && (data.keys().size() == 8 || (data.keys().size() == 9 && (data.keys().hasAll(['aiComplexity']) || data.keys().hasAll(['aiCategory']))) || (data.keys().size() == 10 && data.keys().hasAll(['aiComplexity', 'aiCategory'])));
+      return data.keys().hasAll(['id', 'name', 'phone', 'productName', 'problem', 'ref', 'status', 'submittedAt'])
+        && data.keys().size() >= 8 && data.keys().size() <= 14;
     }
 
     function isValidGMRequest(data) {
@@ -101,6 +103,7 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 64
         && data.customerName is string && data.customerName.size() <= 128
         && data.phone is string && data.phone.size() <= 32
+        && (!data.keys().hasAll(['email']) || data.email is string)
         && data.items is string && data.items.size() <= 5000
         && (data.total is number || data.total is int)
         && data.paid is bool
@@ -111,7 +114,7 @@ service cloud.firestore {
 
     function hasValidOrderKeys(data) {
       return data.keys().hasAll(['id', 'customerName', 'phone', 'items', 'total', 'paid', 'timestamp', 'status'])
-        && (data.keys().size() == 8 || (data.keys().size() == 9 && data.keys().hasAll(['receiptUrl'])));
+        && data.keys().size() >= 8 && data.keys().size() <= 10;
     }
 
     function isValidShadowSchoolApplication(data) {
@@ -211,6 +214,11 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read, write: if isSignedIn();
+    }
+
+    match /admins/{adminId} {
+      allow read: if true;
+      allow write: if isSignedIn() && adminId == request.auth.uid;
     }
 
     match /shadow_school_applications/{applicationId} {
