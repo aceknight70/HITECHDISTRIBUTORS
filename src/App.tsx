@@ -60,8 +60,8 @@ import {
   Moon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { db, auth, ensureAuth, OperationType, handleFirestoreError } from "./lib/firebase";
-import { collection, addDoc, getDocs, onSnapshot, updateDoc, deleteDoc, doc, setDoc, query, orderBy, limit, writeBatch } from "firebase/firestore";
+import { supabase, base64ToBlob, uploadToSupabaseStorage } from "./lib/supabase";
+import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
 import { GalleryCard, getCategoryFallbackImage } from "./components/GalleryCard";
@@ -327,76 +327,21 @@ const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "
         // Step 1: Compress locally to lightweight Base64 instantly
         const compressedBase64 = await compressImageToBase64(file);
         
-        // Step 2: Try to upload to server (which would store on Vercel Blob if configured)
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out")), 60000); // 60s timeout
-          
-          const response = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          
-          const contentType = response.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            const data = await response.json();
-            if (response.ok && data.success) {
-              if (data.provider === "vercel-blob") {
-                setStatus("✅ Image uploaded to cloud!");
-                if (onUploadSuccess) onUploadSuccess(data.url);
-              } else {
-                // If local fallback was used, the file on disk would be deleted on container restart.
-                // To prevent image loss on container reset, save the compressed Base64 string permanently in Firestore!
-                setStatus("✅ Image saved to database!");
-                if (onUploadSuccess) onUploadSuccess(compressedBase64);
-              }
-            } else {
-              throw new Error(data.error || "Server upload failed");
-            }
-          } else {
-            throw new Error(`Upload failed: ${response.status}`);
-          }
-        } catch (apiErr) {
-          console.warn("API upload failed, using robust Base64 fallback:", apiErr);
-          setStatus("✅ Image saved to database!");
-          if (onUploadSuccess) onUploadSuccess(compressedBase64);
-        }
+        // Step 2: Convert to Blob and upload to Supabase Storage
+        const blob = await base64ToBlob(compressedBase64);
+        const publicUrl = await uploadToSupabaseStorage(blob, file.name);
+
+        setStatus("✅ Image uploaded to Supabase Storage!");
+        if (onUploadSuccess) onUploadSuccess(publicUrl);
       } else {
-        // Video Uploads (No base64 compression, standard file upload)
-        const formData = new FormData();
-        formData.append("file", file);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(new Error("Request timed out")), 120000); // 120s timeout
-        
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const data = await response.json();
-          if (response.ok && data.success) {
-            setStatus("✅ Video uploaded successfully!");
-            if (onUploadSuccess) onUploadSuccess(data.url);
-          } else {
-            throw new Error(data.error || "Video server error");
-          }
-        } else {
-          throw new Error(`Upload failed: ${response.status}`);
-        }
+        // Video Uploads: upload directly to Supabase Storage
+        const publicUrl = await uploadToSupabaseStorage(file, file.name);
+        setStatus("✅ Video uploaded successfully!");
+        if (onUploadSuccess) onUploadSuccess(publicUrl);
       }
     } catch (err: any) {
       console.error("General upload error:", err);
-      setStatus("❌ Upload failed.");
+      setStatus("❌ Upload failed: " + err.message);
     } finally {
       setUploading(false);
       setTimeout(() => setStatus(null), 3000);
@@ -414,6 +359,7 @@ const MediaUploadButton = ({ type, label, onUploadSuccess }: { type: "image" | "
           className="hidden"
           onChange={handleUpload}
           disabled={uploading}
+          id="file_input"
         />
       </label>
       {status && (
@@ -535,17 +481,45 @@ const ProductDetailOverlay = ({
     }
     setActiveView(view);
     
-    // Automatically save to Firestore as requested
+    // Automatically save to Supabase as requested
     setSaveStatus("Saving image...");
     try {
       const docId = String(updatedProduct.id);
-      const docRef = doc(db, "products", docId);
-      await setDoc(docRef, JSON.parse(JSON.stringify(updatedProduct)), { merge: true });
+      const mapped = {
+        row_number: updatedProduct.displayOrder ? Number(updatedProduct.displayOrder) : undefined,
+        brand: updatedProduct.brand,
+        product_code: updatedProduct.pn,
+        category: updatedProduct.cat,
+        description_headline: updatedProduct.n,
+        extra_details: updatedProduct.desc,
+        description_bullets: updatedProduct.bullets,
+        technical_specs: updatedProduct.sp,
+        price: updatedProduct.price,
+        assurance_layer: updatedProduct.assuranceLayer,
+        assurance_text: updatedProduct.assuranceText,
+        laggard_layer: updatedProduct.laggardLayer,
+        laggard_promo_text: updatedProduct.laggardPromoText,
+        main_image_url: updatedProduct.imgManual,
+        front_image_url: updatedProduct.imgFront,
+        side_image_url: updatedProduct.imgSide,
+        back_image_url: updatedProduct.imgBack,
+        top_image_url: updatedProduct.imgTop,
+        video_url: updatedProduct.imgVideo,
+        stock_status: updatedProduct.stock,
+        staff_notes: updatedProduct.staffNotes,
+        search_keywords: updatedProduct.searchKeywords,
+        color_variant: updatedProduct.color,
+        needs_verification: updatedProduct.needsVerification === "Yes",
+        floor_display: updatedProduct.floorDisplay === "Yes",
+        show_in_sale_room: !!updatedProduct.promo,
+        show_in_seasonal_promo: !!updatedProduct.newp
+      };
+      await db.updateProduct(docId, mapped);
       setSaveStatus("✅ Image saved successfully!");
       setHasUnsavedChanges(false);
       setTimeout(() => setSaveStatus(null), 3000);
     } catch (e: any) {
-      console.error("Firestore auto-save error:", e);
+      console.error("Supabase auto-save error:", e);
       setSaveStatus("❌ Failed to save image.");
     }
   };
@@ -554,21 +528,43 @@ const ProductDetailOverlay = ({
     if (!selectedProduct) return;
     setSaveStatus("Saving...");
     try {
-      // Sanitize the object completely to ensure serializability (removes undefined, functions, etc.)
-      const dataToSave = JSON.parse(JSON.stringify(selectedProduct));
-      console.log("Attempting to save to Firestore. docId:", selectedProduct.id, "data:", dataToSave);
-
       if (!selectedProduct.id) {
         throw new Error("Cannot save: Product ID is missing.");
       }
 
       const docId = String(selectedProduct.id);
-      if (docId.includes("/")) {
-         throw new Error("Invalid Product ID: contains slashes.");
-      }
+      const prod = selectedProduct as any;
+      const mapped = {
+        row_number: prod.displayOrder ? Number(prod.displayOrder) : undefined,
+        brand: prod.brand,
+        product_code: prod.pn,
+        category: prod.cat,
+        description_headline: prod.n,
+        extra_details: prod.desc,
+        description_bullets: prod.bullets,
+        technical_specs: prod.sp,
+        price: prod.price,
+        assurance_layer: prod.assuranceLayer,
+        assurance_text: prod.assuranceText,
+        laggard_layer: prod.laggardLayer,
+        laggard_promo_text: prod.laggardPromoText,
+        main_image_url: prod.imgManual,
+        front_image_url: prod.imgFront,
+        side_image_url: prod.imgSide,
+        back_image_url: prod.imgBack,
+        top_image_url: prod.imgTop,
+        video_url: prod.imgVideo,
+        stock_status: prod.stock,
+        staff_notes: prod.staffNotes,
+        search_keywords: prod.searchKeywords,
+        color_variant: prod.color,
+        needs_verification: prod.needsVerification === "Yes",
+        floor_display: prod.floorDisplay === "Yes",
+        show_in_sale_room: !!prod.promo,
+        show_in_seasonal_promo: !!prod.newp
+      };
 
-      const docRef = doc(db, "products", docId);
-      await setDoc(docRef, dataToSave, { merge: true });
+      await db.updateProduct(docId, mapped);
       
       const isSolar = solarProducts && solarProducts.some(item => item.id === selectedProduct.id);
       if (isSolar && setSolarProducts) {
@@ -586,7 +582,7 @@ const ProductDetailOverlay = ({
         setSelectedProduct(null);
       }, 1000);
     } catch (e: any) {
-      console.error("Firestore save error:", e);
+      console.error("Supabase save error:", e);
       console.error("Data that failed to save:", selectedProduct);
       setSaveStatus("❌ Failed to save. Please try again.");
     }
@@ -937,6 +933,32 @@ export default function App() {
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadStatus, setLogoUploadStatus] = useState("");
+
+  const handleLogoPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    setLogoUploadStatus("📤 Processing logo...");
+
+    try {
+      const compressedBase64 = await compressImageToBase64(file, 512, 512, 0.9);
+      const blob = await base64ToBlob(compressedBase64);
+      const publicUrl = await uploadToSupabaseStorage(blob, file.name);
+
+      localStorage.setItem("ht_company_logo", publicUrl);
+      window.dispatchEvent(new Event("ht_logo_updated"));
+      setLogoUploadStatus("✅ Logo uploaded successfully!");
+    } catch (err: any) {
+      console.error("Logo upload failed:", err);
+      setLogoUploadStatus("❌ Failed: " + err.message);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
   const handleStorefrontPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -947,48 +969,17 @@ export default function App() {
     try {
       // Step 1: Compress locally to lightweight Base64 instantly
       const compressedBase64 = await compressImageToBase64(file);
+      const blob = await base64ToBlob(compressedBase64);
 
-      // Step 2: Attempt file upload
-      const formData = new FormData();
-      formData.append("file", file);
+      // Step 2: Upload to Supabase Storage
+      const publicUrl = await uploadToSupabaseStorage(blob, file.name);
 
-      let finalUrl = compressedBase64;
-      let isCloud = false;
-
-      try {
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            if (data.provider === "vercel-blob") {
-              finalUrl = data.url;
-              isCloud = true;
-            } else {
-              console.log("Local fallback returned by server. Storing compressed Base64 permanently in Firestore.");
-            }
-          }
-        }
-      } catch (apiErr) {
-        console.warn("API upload failed, using Base64 fallback:", apiErr);
-      }
-
-      setStorefrontImage(finalUrl);
-      localStorage.setItem("ht_storefront_image", finalUrl);
-
-      try {
-        await setDoc(doc(db, "settings", "global"), { storefrontImage: finalUrl }, { merge: true });
-        setUploadStatus(isCloud ? "✅ Image uploaded permanently to cloud!" : "✅ Image saved to database permanently!");
-      } catch (dbErr: any) {
-        console.error("Firestore save error:", dbErr);
-        setUploadStatus("❌ Failed to save image to database.");
-      }
+      setStorefrontImage(publicUrl);
+      localStorage.setItem("ht_storefront_image", publicUrl);
+      setUploadStatus("✅ Storefront image uploaded permanently to Supabase storage!");
     } catch (err: any) {
       console.error("Storefront upload failed:", err);
-      setUploadStatus("❌ Failed to process storefront image.");
+      setUploadStatus("❌ Failed to process storefront image: " + err.message);
     } finally {
       setIsUploading(false);
     }
@@ -1012,11 +1003,6 @@ export default function App() {
     const next = { ...roomPresets, [currentRoom]: preset };
     setRoomPresets(next);
     localStorage.setItem("ht_room_presets", JSON.stringify(next));
-    try {
-      await setDoc(doc(db, "settings", "room_presets"), next, { merge: true });
-    } catch (e) {
-      console.warn("Failed to sync room presets:", e);
-    }
   };
   
   const [customPresets, setCustomPresets] = useState<Record<string, string[]>>({});
@@ -1080,18 +1066,30 @@ export default function App() {
     }
   };
   
-  const [galleryImages, setGalleryImages] = useState([
-    { title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
-    { title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
-    { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
-  ]);
+  const [galleryImages, setGalleryImages] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("ht_gallery_images");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { id: "defaults-1", title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
+      { id: "defaults-2", title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
+      { id: "defaults-3", title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
+    ];
+  });
 
-  const [galleryVideos, setGalleryVideos] = useState<VideoGalleryItem[]>([
-    { id: "v1", title: "How to Use the Hublet", description: "Tutorial on navigating the app", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), views: "1.2k" },
-    { id: "v2", title: "Manager's Address", description: "Message from the General Manager", url: "", category: "Manager's Address", timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), views: "342" },
-    { id: "v3", title: "How to Use a Printer", description: "Printer tutorial", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 10).toISOString(), views: "890" },
-    { id: "v4", title: "How to Use Solar", description: "Solar installation and usage", url: "", category: "Installation", timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), views: "156" }
-  ]);
+  const [galleryVideos, setGalleryVideos] = useState<VideoGalleryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("ht_gallery_videos");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      { id: "v1", title: "How to Use the Hublet", description: "Tutorial on navigating the app", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), views: "1.2k" },
+      { id: "v2", title: "Manager's Address", description: "Message from the General Manager", url: "", category: "Manager's Address", timestamp: new Date(Date.now() - 86400000 * 5).toISOString(), views: "342" },
+      { id: "v3", title: "How to Use a Printer", description: "Printer tutorial", url: "", category: "Tutorial", timestamp: new Date(Date.now() - 86400000 * 10).toISOString(), views: "890" },
+      { id: "v4", title: "How to Use Solar", description: "Solar installation and usage", url: "", category: "Installation", timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), views: "156" }
+    ];
+  });
   
   // Storage falls back to localStorage if Firestore hasn't provisioned yet
   const [repairs, setRepairs] = useState<RepairSubmission[]>([]);
@@ -1233,177 +1231,197 @@ export default function App() {
   const [showVideoForm, setShowVideoForm] = useState(false);
   const [videoSearch, setVideoSearch] = useState("");
 
-  // Initialize and ensure Auth
+  // Initialize Supabase data layer and real-time subscription
   useEffect(() => {
-    ensureAuth();
-    
-    // Load local storage fallbacks first
-    const localRepairs = localStorage.getItem("ht_repairs");
-    if (localRepairs) setRepairs(JSON.parse(localRepairs));
-
-    const localGmRequests = localStorage.getItem("ht_gm_requests");
-    if (localGmRequests) setGmRequests(JSON.parse(localGmRequests));
-
-    const localFeedbacks = localStorage.getItem("ht_feedbacks");
-    if (localFeedbacks) setFeedbacks(JSON.parse(localFeedbacks));
-
-    const localPickups = localStorage.getItem("ht_pickups");
-    if (localPickups) setPickups(JSON.parse(localPickups));
-
-    const localCustomDeals = localStorage.getItem("ht_custom_deals");
-    if (localCustomDeals) setCustomDeals(JSON.parse(localCustomDeals));
-
-    const localBankInfo = localStorage.getItem("ht_bank_info");
-    if (localBankInfo) setBankInfo(localBankInfo);
-
-    const localCustomPresets = localStorage.getItem("ht_custom_presets");
-    if (localCustomPresets) {
+    const loadData = async () => {
       try {
-        setCustomPresets(JSON.parse(localCustomPresets));
-      } catch (e) {}
-    }
+        // Step 1: Seed default products if database is empty on boot
+        await db.seedProductsIfEmpty(initialProducts, initialSolarProducts, DEFAULT_CSV_DATA);
 
-    // Sync from Firestore collections if available
-    try {
-      onSnapshot(collection(db, "repairs"), (snapshot) => {
-        const list: RepairSubmission[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as any);
-        });
-        setRepairs(list.sort((a,b) => b.submittedAt.localeCompare(a.submittedAt)));
-      }, (e) => console.log("repairs snapshot error:", e));
+        // Step 2: Fetch products and split into catalog states
+        const supabaseProducts = await db.fetchProducts();
+        if (supabaseProducts && supabaseProducts.length > 0) {
+          const mapped = supabaseProducts.map((p: any) => ({
+            id: String(p.id),
+            displayOrder: String(p.row_number),
+            brand: p.brand || "HITECH",
+            pn: p.product_code || "",
+            cat: p.category || "laptops",
+            n: p.description_headline || "Imported Product",
+            desc: p.extra_details || p.description_bullets || "",
+            bullets: p.description_bullets || "",
+            sp: p.technical_specs || "",
+            price: p.price || "CALL",
+            assuranceLayer: p.assurance_layer || "No",
+            assuranceText: p.assurance_text || "",
+            laggardLayer: p.laggard_layer || "No",
+            laggardPromoText: p.laggard_promo_text || "",
+            imgManual: p.main_image_url || "",
+            imgFront: p.front_image_url || "",
+            imgSide: p.side_image_url || "",
+            imgBack: p.back_image_url || "",
+            imgTop: p.top_image_url || "",
+            imgVideo: p.video_url || "",
+            stock: p.stock_status || "In Stock",
+            staffNotes: p.staff_notes || "",
+            searchKeywords: p.search_keywords || "",
+            color: p.color_variant || "",
+            needsVerification: p.needs_verification ? "Yes" : "No",
+            floorDisplay: p.floor_display ? "Yes" : "No",
+            promo: p.show_in_sale_room || false,
+            newp: p.show_in_seasonal_promo || false
+          }));
 
-      onSnapshot(collection(db, "gm_requests"), (snapshot) => {
-        const list: GMRequest[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as any);
-        });
-        if (list.length > 0) {
-          setGmRequests(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
+          const laptopPrinters = mapped.filter((p: any) => ["laptops", "printers", "desktops"].includes(p.cat));
+          const solars = mapped.filter((p: any) => !["laptops", "printers", "desktops"].includes(p.cat));
+          
+          setProducts(laptopPrinters);
+          if (solars.length > 0) {
+            setSolarProducts(solars.map(s => ({
+              id: s.id,
+              cat: s.cat.charAt(0).toUpperCase() + s.cat.slice(1),
+              n: s.n,
+              brand: s.brand,
+              sp: s.sp,
+              price: s.price,
+              desc: s.desc,
+              displayOrder: s.displayOrder
+            })));
+          }
         }
-      }, (e) => console.log("gm_requests snapshot error:", e));
 
-      onSnapshot(collection(db, "feedback"), (snapshot) => {
-        const list: FeedbackReview[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as any);
-        });
-        if (list.length > 0) {
-          setFeedbacks(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-        }
-      }, (e) => console.log("feedback snapshot error:", e));
+        // Step 3: Fetch Invoices (Orders)
+        const fetchedInvoices = await db.fetchInvoices();
+        const mappedOrders = fetchedInvoices.map((inv: any) => ({
+          id: inv.invoice_number,
+          db_id: inv.id,
+          customerName: inv.customer_name,
+          phone: inv.customer_contact,
+          email: "",
+          total: inv.total,
+          status: inv.status,
+          timestamp: inv.created_at,
+          items: JSON.stringify((inv.invoice_items || []).map((it: any) => ({
+            id: String(it.product_id),
+            name: it.custom_description,
+            quantity: it.quantity,
+            price: String(it.price)
+          })))
+        }));
+        setOrders(mappedOrders);
 
-      onSnapshot(collection(db, "pickups"), (snapshot) => {
-        const list: PickupSlot[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as any);
-        });
-        if (list.length > 0) {
-          setPickups(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-        }
-      }, (e) => console.log("pickups snapshot error:", e));
-
-      onSnapshot(collection(db, "products"), (snapshot) => {
-        const loadedProducts: Product[] = [];
-        const overrides: Record<string, Partial<Product>> = {};
+        // Step 4: Fetch Support Tickets (repairs + gm escalations)
+        const tickets = await db.fetchSupportTickets();
         
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (doc.id.startsWith("csv-") || doc.id.startsWith("imp-")) {
-            loadedProducts.push({ ...data, id: doc.id } as Product);
-          } else {
-            overrides[doc.id] = data as Partial<Product>;
+        // Filter repairs
+        const mappedRepairs = tickets.filter((t: any) => t.ticket_type === "repair").map((t: any) => {
+          let refVal = String(t.id);
+          let modelSerialVal = "";
+          let methodVal = "In-Store";
+          try {
+            const meta = JSON.parse(t.staff_notes || "");
+            if (meta.ref) refVal = meta.ref;
+            if (meta.modelSerial) modelSerialVal = meta.modelSerial;
+            if (meta.method) methodVal = meta.method;
+          } catch (e) {
+            if (t.product_reference && t.product_reference.includes("|")) {
+              const parts = t.product_reference.split("|");
+              modelSerialVal = parts[1]?.trim() || "";
+            }
           }
+          return {
+            id: String(t.id),
+            name: t.customer_name,
+            phone: t.customer_contact?.split("|")[0]?.trim() || t.customer_contact,
+            email: t.customer_contact?.split("|")[1]?.trim() || "",
+            productName: t.product_reference?.split("|")[0]?.trim() || t.product_reference,
+            modelSerial: modelSerialVal,
+            problem: t.issue_description?.split("|")[0]?.trim() || t.issue_description,
+            method: methodVal,
+            ref: refVal,
+            status: t.status,
+            submittedAt: t.created_at,
+            staff_notes: t.staff_notes
+          };
         });
-        
-        if (loadedProducts.length > 0) {
-           setProducts(loadedProducts.sort((a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0)));
-        }
-        setProductOverrides(overrides);
-      }, (e) => console.log("products snapshot error:", e));
+        setRepairs(mappedRepairs);
 
-      onSnapshot(doc(db, "settings", "presets"), (docSnap) => {
-        if (docSnap.exists()) {
-          setCustomPresets(docSnap.data() as Record<string, string[]>);
-        }
-      }, (e) => console.log("presets snapshot error:", e));
+        // Filter gm requests & escalations
+        const mappedRequests = tickets.filter((t: any) => t.ticket_type === "gm_escalation").map((t: any) => {
+          let prefTimeVal = "Anytime";
+          try {
+            const meta = JSON.parse(t.staff_notes || "");
+            if (meta.preferredTime) prefTimeVal = meta.preferredTime;
+          } catch (e) {}
+          return {
+            id: String(t.id),
+            type: t.issue_description?.split(":")[0]?.trim() || "General",
+            message: t.issue_description?.split(":").slice(1).join(":")?.trim() || t.issue_description,
+            name: t.customer_name,
+            phone: t.customer_contact,
+            preferredTime: prefTimeVal,
+            status: t.status,
+            timestamp: t.created_at
+          };
+        });
+        setGmRequests(mappedRequests);
 
-      onSnapshot(doc(db, "settings", "global"), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data?.storefrontImage) {
-            setStorefrontImage(data.storefrontImage);
+        // Step 5: Fetch Pickup Scheduler
+        const slots = await db.fetchPickupSlots();
+        const mappedSlots = slots.map((s: any) => ({
+          id: String(s.id),
+          name: s.customer_name,
+          phone: s.customer_contact,
+          items: s.order_reference,
+          date: s.pickup_date,
+          timeSlot: s.pickup_time,
+          status: s.status,
+          timestamp: s.created_at
+        }));
+        setPickups(mappedSlots);
+
+        // Step 6: Fetch Client Feedback
+        const reviews = await db.fetchFeedback();
+        const mappedFeedback = reviews.map((r: any) => ({
+          id: String(r.id),
+          name: r.customer_name,
+          rating: r.rating,
+          comment: r.comment,
+          timestamp: r.created_at
+        }));
+        setFeedbacks(mappedFeedback);
+
+        // Step 7: Fetch client channels
+        try {
+          const channels = await db.fetchClientChannels();
+          if (channels && channels.whatsapp) {
+            localStorage.setItem("ht_whatsapp_channel", channels.whatsapp);
           }
-          if (data?.bankInfo) {
-            setBankInfo(data.bankInfo);
-          }
-          if (data?.managerAvailable !== undefined) {
-            setManagerAvailable(data.managerAvailable);
-          }
+        } catch (e) {}
+
+      } catch (err) {
+        console.error("Error loading data from Supabase:", err);
+      }
+    };
+
+    loadData();
+
+    // Set up postgres changes realtime channel
+    const channel = supabase
+      .channel("postgres-changes-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public" },
+        () => {
+          console.log("Postgres database change detected! Re-syncing states...");
+          loadData();
         }
-      }, (e) => console.log("global settings snapshot error:", e));
+      )
+      .subscribe();
 
-      onSnapshot(collection(db, "orders"), (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-        setOrders(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-      }, (e) => console.log("orders snapshot error:", e));
-
-      onSnapshot(collection(db, "receipts"), (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-        setReceipts(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-      }, (e) => console.log("receipts snapshot error:", e));
-
-      onSnapshot(collection(db, "escalations"), (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-        setEscalations(list.sort((a,b) => b.timestamp - a.timestamp));
-      }, (e) => console.log("escalations snapshot error:", e));
-
-      onSnapshot(collection(db, "shadow_school_applications"), (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-        setSchoolApplications(list.sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
-      }, (e) => console.log("school applications snapshot error:", e));
-
-      onSnapshot(collection(db, "gallery_images"), (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() });
-        });
-        const sortedList = list.sort((a,b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
-        const defaults = [
-          { title: "HP Printers Section", url: "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?auto=format&fit=crop&w=500&q=80", caption: "All-in-One InkTank and heavy LaserJet workspace scanners in stock." },
-          { title: "Solar Inverter Bank", url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80", caption: "Selection of Cworth hybrids and Felicity smart battery storage units." },
-          { title: "Desktop Configuration", url: "https://images.unsplash.com/photo-1547082299-de196ea013d6?auto=format&fit=crop&w=500&q=80", caption: "HP EliteDesk and All-in-One workstations configured on display." }
-        ];
-        setGalleryImages([...sortedList, ...defaults]);
-      }, (e) => console.log("gallery_images snapshot error:", e));
-
-      onSnapshot(doc(db, "settings", "room_presets"), (docSnap) => {
-        if (docSnap.exists()) {
-          setRoomPresets(docSnap.data() as Record<string, PresetType>);
-        }
-      }, (e) => console.log("room_presets snapshot error:", e));
-
-      onSnapshot(doc(db, "settings", "display_floor_config"), (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.selection) setDisplayFloorSelection(data.selection);
-        }
-      }, (e) => console.log("display_floor_config snapshot error:", e));
-    } catch (err) {
-      console.warn("Firestore listener initialization skipped (offline/unconfigured fallback).");
-    }
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Sync to local storage on adjustments (for robust offline fallback)
@@ -1418,28 +1436,60 @@ export default function App() {
   const displayedProducts = React.useMemo(() => {
     let list: Product[] = [];
     
+    // Build a unified map of all database-fetched products by displayOrder (string)
+    const productsMap = new Map<string, Product>();
+    
+    // 1. Add laptops/printers/desktops
+    products.forEach((p, idx) => {
+       const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
+       productsMap.set(numStr, p);
+    });
+    
+    // 2. Add solar products mapped to Product format
+    solarProducts.forEach((s) => {
+       if (s.displayOrder) {
+         const numStr = String(s.displayOrder);
+         productsMap.set(numStr, {
+           id: s.id,
+           pn: "",
+           cat: s.cat.toLowerCase(),
+           n: s.n,
+           brand: s.brand,
+           sp: s.sp,
+           price: s.price,
+           desc: s.desc,
+           displayOrder: s.displayOrder
+         } as any);
+       }
+    });
+
+    // Helper helper to get a product from the database map or fallback to local static
+    const getProductWithDbResolve = (p: any, i: number): Product => {
+      const numStr = String(p.displayOrder);
+      if (productsMap.has(numStr)) {
+        return productsMap.get(numStr)!;
+      }
+      return {
+        id: `def-${i}`,
+        pn: p.productCode || "—",
+        cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
+        n: `${p.brand} ${p.category}`.trim(),
+        sp: p.specs,
+        price: p.price || "CALL",
+        desc: p.description || "Default Description",
+        bullets: (p as any).bullets,
+        stock: (p as any).stockStatus,
+        displayOrder: p.displayOrder,
+      } as any;
+    };
+
     // For Display Floor, we ignore `currentPreset` and use `displayFloorSelection`
     if (currentRoom === "display") {
-      const productsMap = new Map<string, Product>();
-      products.forEach((p, idx) => {
-         const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
-         productsMap.set(numStr, p);
-      });
+      // populate fallbacks for productsMap if needed
       DEFAULT_CSV_DATA.forEach((p, i) => {
          const numStr = String(p.displayOrder);
          if (!productsMap.has(numStr)) {
-            productsMap.set(numStr, {
-               id: `def-${i}`,
-               pn: p.productCode || "—",
-               cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-               n: `${p.brand} ${p.category}`.trim(),
-               sp: p.specs,
-               price: p.price || "CALL",
-               desc: p.description || "Default Description",
-               bullets: (p as any).bullets,
-               stock: (p as any).stockStatus,
-               displayOrder: p.displayOrder,
-            } as any);
+            productsMap.set(numStr, getProductWithDbResolve(p, i));
          }
       });
 
@@ -1453,28 +1503,12 @@ export default function App() {
     } else {
       if (customPresets[currentPreset]) {
         const targetNumbers = customPresets[currentPreset];
-        const productsMap = new Map<string, Product>();
         
-        products.forEach((p, idx) => {
-           const numStr = p.displayOrder ? String(p.displayOrder) : String(idx + 1);
-           productsMap.set(numStr, p);
-        });
-        
+        // populate fallbacks for productsMap if needed
         DEFAULT_CSV_DATA.forEach((p, i) => {
            const numStr = String(p.displayOrder);
            if (!productsMap.has(numStr)) {
-              productsMap.set(numStr, {
-                 id: `def-${i}`,
-                 pn: p.productCode || "—",
-                 cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-                 n: `${p.brand} ${p.category}`.trim(),
-                 sp: p.specs,
-                 price: p.price || "CALL",
-                 desc: p.description || "Default Description",
-                 bullets: (p as any).bullets,
-                 stock: (p as any).stockStatus,
-                 displayOrder: p.displayOrder,
-              } as any);
+              productsMap.set(numStr, getProductWithDbResolve(p, i));
            }
         });
         
@@ -1482,18 +1516,7 @@ export default function App() {
       } else {
         list = products;
         if (currentPreset === "DEFAULT") {
-          list = DEFAULT_CSV_DATA.map((p, i) => ({
-            id: `def-${i}`,
-            pn: p.productCode || "—",
-            cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-            n: `${p.brand} ${p.category}`.trim(),
-            sp: p.specs,
-            price: p.price || "CALL",
-            desc: p.description || "Default Description",
-            bullets: (p as any).bullets,
-            stock: (p as any).stockStatus,
-            displayOrder: p.displayOrder,
-          }));
+          list = DEFAULT_CSV_DATA.map((p, i) => getProductWithDbResolve(p, i));
         } else if (currentPreset === "PROMO HIGH") list = list.filter(p => p.promo);
         else if (currentPreset === "SEASONAL DEALS") list = list.filter(p => p.newp || p.cat === "laptops");
         else if (currentPreset === "LAST IMPORTED SHEET") list = list.filter(p => p.id && (p.id.startsWith("imp-") || p.id.startsWith("csv-")));
@@ -1503,18 +1526,7 @@ export default function App() {
 
     // Fail-safe: If the list is empty (e.g. newly loaded app or empty custom selection), load the default 25 products automatically
     if (list.length === 0) {
-      list = DEFAULT_CSV_DATA.map((p, i) => ({
-        id: `def-${i}`,
-        pn: p.productCode || "—",
-        cat: p.category.toLowerCase().includes("laptop") ? "laptops" : p.category.toLowerCase().includes("battery") ? "tubular battery" : p.category.toLowerCase().includes("inverter") ? "inverters" : "laptops",
-        n: `${p.brand} ${p.category}`.trim(),
-        sp: p.specs,
-        price: p.price || "CALL",
-        desc: p.description || "Default Description",
-        bullets: (p as any).bullets,
-        stock: (p as any).stockStatus,
-        displayOrder: p.displayOrder,
-      } as any));
+      list = DEFAULT_CSV_DATA.map((p, i) => getProductWithDbResolve(p, i));
     }
 
     // Apply Firestore overrides
@@ -1669,6 +1681,7 @@ export default function App() {
 
     const orderRecord = {
       id: newInvoiceId,
+      db_id: undefined as any,
       customerName,
       phone: customerPhone,
       email: customerEmail,
@@ -1679,10 +1692,35 @@ export default function App() {
       status: "Pending Payment" as any,
     };
 
+    const invoiceRecord = {
+      invoice_number: newInvoiceId,
+      customer_name: customerName,
+      customer_contact: customerPhone + (customerEmail ? ` | ${customerEmail}` : ""),
+      discount: 0,
+      total: totalAmount,
+      status: "Pending Payment"
+    };
+
+    const invoiceItems = cart.map(item => {
+      const priceStr = getDisplayPrice(item.product);
+      let priceNum = 0;
+      if (priceStr !== "CALL") {
+        priceNum = parseInt(priceStr.replace(/[^\d]/g, ""), 10);
+      }
+      const prodIdNum = isNaN(Number(item.product.id)) ? 0 : Number(item.product.id);
+      return {
+        product_id: prodIdNum,
+        custom_description: item.product.n,
+        price: priceNum,
+        quantity: item.quantity
+      };
+    });
+
     try {
-      await addDoc(collection(db, "orders"), orderRecord);
+      const inserted = await db.insertInvoice(invoiceRecord, invoiceItems);
+      orderRecord.db_id = inserted.id;
     } catch (e) {
-      // Local fallback
+      console.error("Supabase save failed, falling back to local list:", e);
       const localOrders = JSON.parse(localStorage.getItem("ht_orders") || "[]");
       localStorage.setItem("ht_orders", JSON.stringify([orderRecord, ...localOrders]));
     }
@@ -1748,11 +1786,21 @@ Please confirm receipt of this invoice.`;
       submittedAt: new Date().toISOString(),
     };
 
-    // Save with unique document ID to prevent overwriting
+    const ticketPayload = {
+      ticket_type: "repair",
+      customer_name: repairCustName,
+      customer_contact: repairCustPhone + (repairCustEmail ? ` | ${repairCustEmail}` : ""),
+      product_reference: repairProductName + (repairModelSerial ? ` | ${repairModelSerial}` : ""),
+      issue_description: repairProblem,
+      status: "Received",
+      staff_notes: JSON.stringify({ ref: refCode, modelSerial: repairModelSerial, method: repairMethod })
+    };
+
     try {
-      await setDoc(doc(db, "repairs", refCode), newRepair);
+      const inserted = await db.insertSupportTicket(ticketPayload);
+      newRepair.id = String(inserted.id);
     } catch (err) {
-      console.warn("Firebase save failed for repair, falling back to local list:", err);
+      console.error("Supabase save failed for repair, falling back to local list:", err);
       const updatedList = [newRepair, ...repairs];
       setRepairs(updatedList);
       saveLocal("ht_repairs", updatedList);
@@ -1858,10 +1906,21 @@ Contact Phone: ${repairCustPhone}`;
       timestamp: Date.now()
     };
     
+    const ticketPayload = {
+      ticket_type: "gm_escalation",
+      customer_name: escName,
+      customer_contact: escPhone + (escEmail ? ` | ${escEmail}` : ""),
+      product_reference: escRef || "General Escalation",
+      issue_description: `${escUrgency}: ${escDesc}`,
+      status: "pending",
+      staff_notes: JSON.stringify({ ref: ticketNum, urgency: escUrgency })
+    };
+
     try {
-      await addDoc(collection(db, "escalations"), newEsc);
+      const inserted = await db.insertSupportTicket(ticketPayload);
+      newEsc.id = String(inserted.id);
     } catch(err) {
-      console.warn("Firebase save failed for escalation");
+      console.error("Supabase save failed for escalation:", err);
     }
 
     const eseText = `⭐ New Escalation Request from ${escName}
@@ -1933,9 +1992,21 @@ Issue: ${escDesc}`;
       timestamp: new Date().toISOString(),
     };
 
+    const ticketPayload = {
+      ticket_type: "gm_escalation",
+      customer_name: gmCustName,
+      customer_contact: gmCustPhone,
+      product_reference: "GM Direct Contact",
+      issue_description: `${gmMsgType}: ${gmMsgText}`,
+      status: "pending",
+      staff_notes: JSON.stringify({ ref: requestRecord.id, preferredTime: gmPrefTime })
+    };
+
     try {
-      await addDoc(collection(db, "gm_requests"), requestRecord);
+      const inserted = await db.insertSupportTicket(ticketPayload);
+      requestRecord.id = String(inserted.id);
     } catch (e) {
+      console.error("Supabase save failed for GM contact:", e);
       const list = [requestRecord, ...gmRequests];
       setGmRequests(list);
       saveLocal("ht_gm_requests", list);
@@ -2014,9 +2085,17 @@ Issue: ${escDesc}`;
       timestamp: new Date().toISOString(),
     };
 
+    const feedbackPayload = {
+      customer_name: feedName,
+      rating: feedRating,
+      comment: feedComment
+    };
+
     try {
-      await addDoc(collection(db, "feedback"), review);
+      const inserted = await db.insertFeedback(feedbackPayload);
+      review.id = String(inserted.id);
     } catch (e) {
+      console.error("Supabase feedback insert failed:", e);
       const list = [review, ...feedbacks];
       setFeedbacks(list);
       saveLocal("ht_feedbacks", list);
@@ -2046,9 +2125,20 @@ Issue: ${escDesc}`;
       timestamp: new Date().toISOString(),
     };
 
+    const slotPayload = {
+      customer_name: pickupName,
+      customer_contact: pickupPhone,
+      order_reference: pickupItems,
+      pickup_date: pickupDate,
+      pickup_time: pickupTimeSlot,
+      status: "scheduled"
+    };
+
     try {
-      await addDoc(collection(db, "pickups"), booking);
+      const inserted = await db.insertPickupSlot(slotPayload);
+      booking.id = String(inserted.id);
     } catch (e) {
+      console.error("Supabase pickup insert failed:", e);
       const list = [booking, ...pickups];
       setPickups(list);
       saveLocal("ht_pickups", list);
@@ -2088,10 +2178,21 @@ Issue: ${escDesc}`;
       timestamp: new Date().toISOString(),
     };
 
+    const ticketPayload = {
+      ticket_type: "school_application",
+      customer_name: schName,
+      customer_contact: schPhone + " | " + schEmail,
+      product_reference: schProgram,
+      issue_description: schReason,
+      status: "pending",
+      staff_notes: JSON.stringify({ age: ageVal })
+    };
+
     try {
-      await addDoc(collection(db, "shadow_school_applications"), application);
+      const inserted = await db.insertSupportTicket(ticketPayload);
+      application.id = String(inserted.id);
     } catch (error) {
-      console.error("Failed to save to Firestore, falling back to local storage:", error);
+      console.error("Failed to save to Supabase, falling back to local storage:", error);
       try {
         const localApps = localStorage.getItem("ht_school_applications");
         const list = localApps ? JSON.parse(localApps) : [];
@@ -2139,17 +2240,6 @@ Issue: ${escDesc}`;
     setStaffError("");
     if (staffPIN === "12345" || staffPIN === "qw123#@") {
       setStaffIsLoggedIn(true);
-      if (auth.currentUser) {
-        try {
-          await setDoc(doc(db, "admins", auth.currentUser.uid), {
-            role: staffPIN === "qw123#@" ? "manager" : "staff",
-            timestamp: new Date().toISOString()
-          });
-          console.log("Successfully elevated client uid in Firestore admins.");
-        } catch (dbErr) {
-          console.error("Failed to sync admin privilege in Firestore:", dbErr);
-        }
-      }
     } else {
       setStaffError("Invalid Access PIN or Manager Key.");
     }
@@ -2250,22 +2340,118 @@ Issue: ${escDesc}`;
       });
 
       if (importedProducts.length > 0) {
-        setCsvStatus(`Saving ${importedProducts.length} items to permanent storage...`);
+        setCsvStatus(`Saving ${importedProducts.length} items to Supabase storage...`);
         try {
-           const batch = writeBatch(db);
-           // Firestore batch is limited to 500 writes, we only have ~155
-           importedProducts.forEach(p => {
-             const docRef = doc(db, "products", p.id);
-             batch.set(docRef, p, { merge: true }); // MERGE to not overwrite existing photos
+           // Fetch all existing products for "hitech" to map row_numbers & product_codes to real DB ids
+           const { data: existingDbProducts } = await supabase
+             .from("products")
+             .select("id, row_number, product_code")
+             .eq("client_id", "hitech");
+
+           const dbMapByRow = new Map<number, number>();
+           const dbMapByCode = new Map<string, number>();
+           if (existingDbProducts) {
+             existingDbProducts.forEach((item: any) => {
+               if (item.row_number) dbMapByRow.set(Number(item.row_number), Number(item.id));
+               if (item.product_code) dbMapByCode.set(String(item.product_code).trim(), Number(item.id));
+             });
+           }
+
+           const mappedProducts = importedProducts.map(p => {
+             const rowNum = p.displayOrder ? Number(p.displayOrder) : undefined;
+             const prodCode = p.pn ? String(p.pn).trim() : undefined;
+             
+             let existingId: number | undefined = undefined;
+             if (prodCode && prodCode !== "—" && prodCode !== "-" && dbMapByCode.has(prodCode)) {
+               existingId = dbMapByCode.get(prodCode);
+             } else if (rowNum && dbMapByRow.has(rowNum)) {
+               existingId = dbMapByRow.get(rowNum);
+             }
+
+             return {
+               id: existingId,
+               client_id: "hitech",
+               row_number: rowNum,
+               brand: p.brand,
+               product_code: p.pn,
+               category: p.cat,
+               description_headline: p.n,
+               extra_details: p.desc,
+               description_bullets: p.bullets,
+               technical_specs: p.sp,
+               price: p.price,
+               assurance_layer: p.assuranceLayer === "Yes" || p.assuranceLayer === "true",
+               assurance_text: p.assuranceText,
+               laggard_layer: p.laggardLayer === "Yes" || p.laggardLayer === "true",
+               laggard_promo_text: p.laggardPromoText,
+               main_image_url: p.imgManual,
+               front_image_url: p.imgFront,
+               side_image_url: p.imgSide,
+               back_image_url: p.imgBack,
+               top_image_url: p.imgTop,
+               video_url: p.imgVideo,
+               stock_status: p.stock,
+               staff_notes: p.staffNotes,
+               search_keywords: p.searchKeywords,
+               color_variant: p.color,
+               needs_verification: p.needsVerification === "Yes",
+               floor_display: p.floorDisplay === "Yes",
+               show_in_sale_room: !!p.promo,
+               show_in_seasonal_promo: !!p.newp
+             };
            });
-           await batch.commit();
+
+           const { error } = await supabase
+             .from("products")
+             .upsert(mappedProducts);
+
+           if (error) throw error;
            
-           setProducts(importedProducts);
+           // Fetch the updated list of products from DB to get the new real IDs assigned to them
+           const supabaseProducts = await db.fetchProducts();
+           if (supabaseProducts && supabaseProducts.length > 0) {
+             const mapped = supabaseProducts.map((p: any) => ({
+               id: String(p.id),
+               displayOrder: String(p.row_number),
+               brand: p.brand || "HITECH",
+               pn: p.product_code || "",
+               cat: p.category || "laptops",
+               n: p.description_headline || "Imported Product",
+               desc: p.extra_details || p.description_bullets || "",
+               bullets: p.description_bullets || "",
+               sp: p.technical_specs || "",
+               price: p.price || "CALL",
+               assuranceLayer: p.assurance_layer || "No",
+               assuranceText: p.assurance_text || "",
+               laggardLayer: p.laggard_layer || "No",
+               laggardPromoText: p.laggard_promo_text || "",
+               imgManual: p.main_image_url || "",
+               imgFront: p.front_image_url || "",
+               imgSide: p.side_image_url || "",
+               back_image_url: p.back_image_url || "",
+               top_image_url: p.top_image_url || "",
+               imgVideo: p.video_url || "",
+               stock: p.stock_status || "In Stock",
+               staffNotes: p.staff_notes || "",
+               searchKeywords: p.search_keywords || "",
+               color: p.color_variant || "",
+               needsVerification: p.needs_verification ? "Yes" : "No",
+               floorDisplay: p.floor_display ? "Yes" : "No",
+               promo: p.show_in_sale_room || false,
+               newp: p.show_in_seasonal_promo || false
+             }));
+
+             const laptopPrinters = mapped.filter((p: any) => ["laptops", "printers", "desktops"].includes(p.cat));
+             setProducts(laptopPrinters);
+           } else {
+             setProducts(importedProducts);
+           }
+           
            setCurrentPreset("LAST IMPORTED SHEET");
            setCsvStatus(`✅ Data saved successfully! All products and images are stored permanently.`);
-        } catch (err) {
-           console.error("Firestore save error:", err);
-           setCsvStatus("❌ Failed to save data. Please try again.");
+        } catch (err: any) {
+           console.error("Supabase sheet save error:", err);
+           setCsvStatus("❌ Failed to save data: " + err.message);
         }
       } else {
         setCsvStatus("Could not parse any valid rows. Ensure format matches the template.");
@@ -2295,11 +2481,11 @@ Issue: ${escDesc}`;
               if (preset.id === "DEFAULT") {
                 const defSelection = Array.from({ length: 25 }, (_, i) => String(131 + i));
                 setDisplayFloorSelection(defSelection);
-                setDoc(doc(db, "settings", "display_floor_config"), { selection: defSelection }, { merge: true }).catch(err => console.warn("Failed to sync selection:", err));
+                localStorage.setItem("ht_display_floor_config", JSON.stringify(defSelection));
               } else if (preset.id === "LAST IMPORTED SHEET") {
                 const impSelection = Array.from({ length: 155 }, (_, i) => String(1 + i));
                 setDisplayFloorSelection(impSelection);
-                setDoc(doc(db, "settings", "display_floor_config"), { selection: impSelection }, { merge: true }).catch(err => console.warn("Failed to sync selection:", err));
+                localStorage.setItem("ht_display_floor_config", JSON.stringify(impSelection));
               }
             }}
             className={`p-2 rounded-lg border flex flex-col items-center justify-center text-center relative ${currentPreset === preset.id ? "bg-slate-800 shadow-inner " + preset.border : "bg-slate-950 border-slate-800"}`}
@@ -2395,13 +2581,7 @@ Issue: ${escDesc}`;
                   onClick={async () => {
                     const newPresets = { ...customPresets, [editingPreset]: editingNumbers };
                     setCustomPresets(newPresets);
-                    try {
-                      await setDoc(doc(db, "settings", "presets"), newPresets, { merge: true });
-                    } catch (e) {
-                      console.warn("Failed to sync preset to Firestore:", e);
-                      // Fallback to local
-                      localStorage.setItem("ht_custom_presets", JSON.stringify(newPresets));
-                    }
+                    localStorage.setItem("ht_custom_presets", JSON.stringify(newPresets));
                     setEditingPreset(null);
                   }}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded text-xs font-bold uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-colors"
@@ -2768,17 +2948,15 @@ Issue: ${escDesc}`;
                     onUploadSuccess={async (url) => {
                       const id = "img-" + Date.now().toString();
                       const payload = {
+                        id,
                         title: "New Uploaded Photo",
                         caption: "User uploaded image",
                         url,
                         timestamp: new Date().toISOString()
                       };
-                      try {
-                        await setDoc(doc(db, "gallery_images", id), payload);
-                      } catch (e) {
-                        console.error("Gallery image upload sync failed:", e);
-                        setGalleryImages(prev => [payload, ...prev]);
-                      }
+                      const next = [payload, ...galleryImages];
+                      setGalleryImages(next);
+                      localStorage.setItem("ht_gallery_images", JSON.stringify(next));
                     }}
                   />
                 </div>
@@ -2800,11 +2978,9 @@ Issue: ${escDesc}`;
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   if (confirm("Are you sure you want to delete this walkthrough photo?")) {
-                                    try {
-                                      await deleteDoc(doc(db, "gallery_images", img.id));
-                                    } catch (err) {
-                                      handleFirestoreError(err, OperationType.DELETE, `gallery_images/${img.id}`);
-                                    }
+                                    const next = galleryImages.filter(g => g.id !== img.id);
+                                    setGalleryImages(next);
+                                    localStorage.setItem("ht_gallery_images", JSON.stringify(next));
                                   }
                                 }}
                                 className="absolute top-2 right-2 p-1.5 bg-red-600 hover:bg-red-500 text-white rounded-full shadow transition-colors z-10"
@@ -2925,21 +3101,15 @@ Issue: ${escDesc}`;
                           views: editingVideo ? editingVideo.views : "0"
                         };
                         
-                        if (editingVideo) {
-                          setGalleryVideos(prev => prev.map(v => v.id === editingVideo.id ? newVideo : v));
-                        } else {
-                          setGalleryVideos(prev => [newVideo, ...prev]);
-                        }
+                        const nextVideos = editingVideo 
+                          ? galleryVideos.map(v => v.id === editingVideo.id ? newVideo : v)
+                          : [newVideo, ...galleryVideos];
+                        
+                        setGalleryVideos(nextVideos);
+                        localStorage.setItem("ht_gallery_videos", JSON.stringify(nextVideos));
                         
                         setShowVideoForm(false);
                         setEditingVideo(null);
-                        
-                        // Sync to Firestore if needed
-                        try {
-                          setDoc(doc(db, "settings", "galleryVideos"), { videos: editingVideo ? galleryVideos.map(v => v.id === editingVideo.id ? newVideo : v) : [newVideo, ...galleryVideos] }, { merge: true });
-                        } catch (err) {
-                          console.warn("Could not sync videos to Firestore:", err);
-                        }
                       }}
                       className="flex flex-col gap-3"
                     >
@@ -3018,15 +3188,13 @@ Issue: ${escDesc}`;
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
-                              <button 
+                               <button 
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
                                   if (confirm("Delete this video?")) {
                                     const newVids = galleryVideos.filter(v => v.id !== vid.id);
                                     setGalleryVideos(newVids);
-                                    try {
-                                      setDoc(doc(db, "settings", "galleryVideos"), { videos: newVids }, { merge: true });
-                                    } catch (err) {}
+                                    localStorage.setItem("ht_gallery_videos", JSON.stringify(newVids));
                                   }
                                 }}
                                 className="p-1.5 bg-red-900/30 hover:bg-red-800/50 text-red-400 rounded transition-colors"
@@ -3969,7 +4137,7 @@ Issue: ${escDesc}`;
                         onClick={async () => {
                           const conf = { selection: displayFloorSelection };
                           try {
-                            await setDoc(doc(db, "settings", "display_floor_config"), conf, { merge: true });
+                            localStorage.setItem("ht_display_floor_config", JSON.stringify(displayFloorSelection));
                             setCsvStatus("✅ Display Floor Selection Saved!");
                             setTimeout(() => setCsvStatus(""), 3000);
                           } catch (e) {
@@ -4399,13 +4567,6 @@ Issue: ${escDesc}`;
                         type="text"
                         value={bankInfo}
                         onChange={(e) => { setBankInfo(e.target.value); localStorage.setItem("ht_bank_info", e.target.value); }}
-                        onBlur={async () => {
-                          try {
-                            await setDoc(doc(db, "settings", "global"), { bankInfo }, { merge: true });
-                          } catch (e) {
-                            console.warn("Failed to sync bank details to Firestore:", e);
-                          }
-                        }}
                         className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2 outline-none font-mono"
                       />
                     </div>
@@ -4440,13 +4601,6 @@ Issue: ${escDesc}`;
                             onChange={(e) => {
                               setStorefrontImage(e.target.value);
                               localStorage.setItem("ht_storefront_image", e.target.value);
-                            }}
-                            onBlur={async () => {
-                              try {
-                                await setDoc(doc(db, "settings", "global"), { storefrontImage }, { merge: true });
-                              } catch (e) {
-                                console.warn("Failed to sync storefront photo to Firestore:", e);
-                              }
                             }}
                             placeholder="Paste image URL here..."
                             className="w-full bg-slate-950 border border-slate-800 text-[11px] text-[var(--cr)] rounded p-1.5 outline-none font-mono"
@@ -4487,11 +4641,6 @@ Issue: ${escDesc}`;
                               const img = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
-                              try {
-                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
-                              } catch (e) {
-                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
-                              }
                               setUploadStatus("Selected premium storefront preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -4504,11 +4653,6 @@ Issue: ${escDesc}`;
                               const img = "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
-                              try {
-                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
-                              } catch (e) {
-                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
-                              }
                               setUploadStatus("Selected clean showroom preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -4521,11 +4665,6 @@ Issue: ${escDesc}`;
                               const img = "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
                               localStorage.setItem("ht_storefront_image", img);
-                              try {
-                                await setDoc(doc(db, "settings", "global"), { storefrontImage: img }, { merge: true });
-                              } catch (e) {
-                                console.warn("Failed to sync storefront photo preset to Firestore:", e);
-                              }
                               setUploadStatus("Selected tech devices preset!");
                             }}
                             className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
@@ -4815,7 +4954,7 @@ Issue: ${escDesc}`;
                                       onChange={async (e) => {
                                         const newStatus = e.target.value;
                                         try {
-                                          await setDoc(doc(db, "orders", order.id), { status: newStatus }, { merge: true });
+                                          await db.updateInvoiceStatus(order.db_id, newStatus);
                                           setStaffActionStatus(`Status updated for #${order.id}!`);
                                           setTimeout(() => setStaffActionStatus(null), 3000);
                                         } catch (err) {
@@ -4830,7 +4969,7 @@ Issue: ${escDesc}`;
                                       <option value="Dispatched/Completed">Dispatched/Completed</option>
                                     </select>
                                   </div>
-                                  {!order.paid && (
+                                  {!order.paid && order.status !== "Paid & Awaiting Processing" && (
                                     <button
                                       onClick={async () => {
                                         const rcpNum = "RCP-" + Math.floor(100000 + Math.random() * 900000);
@@ -4842,8 +4981,12 @@ Issue: ${escDesc}`;
                                           timestamp: new Date().toISOString()
                                         };
                                         try {
-                                          await setDoc(doc(db, "receipts", rcpNum), rcpPayload);
-                                          await setDoc(doc(db, "orders", order.id), { paid: true, status: "Paid & Awaiting Processing" }, { merge: true });
+                                          await db.updateInvoiceStatus(order.db_id, "Paid & Awaiting Processing");
+                                          
+                                          const localReceipts = JSON.parse(localStorage.getItem("ht_receipts") || "[]");
+                                          localReceipts.push(rcpPayload);
+                                          localStorage.setItem("ht_receipts", JSON.stringify(localReceipts));
+                                          
                                           setStaffActionStatus(`Issued Official Receipt ${rcpNum}!`);
                                           setTimeout(() => setStaffActionStatus(null), 4000);
                                         } catch (err) {
@@ -4901,13 +5044,9 @@ Issue: ${escDesc}`;
                                 <p className="font-bold text-red-400">{esc.id} [{esc.urgency}]</p>
                                 <button 
                                   onClick={async () => {
-                                    try {
-                                      await deleteDoc(doc(db, "escalations", esc.id));
-                                      setStaffActionStatus(`Resolved ticket ${esc.id}!`);
-                                      setTimeout(() => setStaffActionStatus(null), 3000);
-                                    } catch (err) {
-                                      console.error("Failed to delete escalation:", err);
-                                    }
+                                    setEscalations(prev => prev.filter(e => e.id !== esc.id));
+                                    setStaffActionStatus(`Resolved ticket ${esc.id}!`);
+                                    setTimeout(() => setStaffActionStatus(null), 3000);
                                   }}
                                   className="px-1.5 py-0.5 bg-slate-900 hover:bg-red-950/40 text-slate-500 hover:text-red-400 rounded text-[9px] border border-slate-800 uppercase cursor-pointer"
                                 >
@@ -4946,13 +5085,9 @@ Issue: ${escDesc}`;
                               <div className="flex justify-end gap-1 border-t border-slate-900 pt-1.5 mt-1">
                                 <button 
                                   onClick={async () => {
-                                    try {
-                                      await deleteDoc(doc(db, "shadow_school_applications", app.id));
-                                      setStaffActionStatus(`Application for ${app.name} processed!`);
-                                      setTimeout(() => setStaffActionStatus(null), 3000);
-                                    } catch (err) {
-                                      console.error("Failed to delete application:", err);
-                                    }
+                                    setSchoolApplications(prev => prev.filter(a => a.id !== app.id));
+                                    setStaffActionStatus(`Application for ${app.name} processed!`);
+                                    setTimeout(() => setStaffActionStatus(null), 3000);
                                   }}
                                   className="px-2 py-0.5 bg-slate-900 hover:bg-red-950/40 text-slate-400 hover:text-red-400 border border-slate-800 rounded text-[9px] font-bold uppercase cursor-pointer"
                                 >

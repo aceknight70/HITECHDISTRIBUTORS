@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 
 interface HitechLogoProps {
@@ -7,6 +7,45 @@ interface HitechLogoProps {
 }
 
 export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className = "" }) => {
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const localLogo = localStorage.getItem("ht_company_logo");
+    if (localLogo) {
+      setLogoUrl(localLogo);
+    }
+
+    const handleStorageChange = () => {
+      const updatedLogo = localStorage.getItem("ht_company_logo");
+      setLogoUrl(updatedLogo);
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("ht_logo_updated", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("ht_logo_updated", handleStorageChange);
+    };
+  }, []);
+
+  if (logoUrl) {
+    const imgHeight = size === "sm" ? "h-6" : size === "md" ? "h-10" : "h-16";
+    return (
+      <div className={`inline-flex flex-col select-none ${className}`}>
+        <img 
+          src={logoUrl} 
+          alt="HiTech Logo" 
+          className={`${imgHeight} object-contain rounded bg-slate-950/20`}
+          onError={() => {
+            // Remove broken link and fallback to CSS logo
+            setLogoUrl(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   // Define sizes
   const sizes = {
     sm: {

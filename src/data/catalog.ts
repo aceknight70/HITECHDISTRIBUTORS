@@ -39,6 +39,7 @@ export interface SolarProduct {
   sp: string;
   price: string;
   desc: string;
+  displayOrder?: string | number;
 }
 
 export const CATEGORIES = [
