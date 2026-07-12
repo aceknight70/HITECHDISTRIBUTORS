@@ -1,7 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || "";
+const supabaseUrl = 
+  (import.meta as any).env?.VITE_SUPABASE_URL || 
+  (typeof process !== "undefined" && process.env?.VITE_SUPABASE_URL) || 
+  "";
+const supabaseAnonKey = 
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 
+  (typeof process !== "undefined" && process.env?.VITE_SUPABASE_ANON_KEY) || 
+  "";
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn("Supabase credentials missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.");
@@ -66,9 +72,25 @@ export async function fetchProducts() {
 
 export async function insertProduct(product: any) {
   const { id, ...rest } = product; // Never supply custom id values, let identity column assign it
+  
+  const sanitized = { ...rest };
+  if ("product_code" in sanitized) {
+    const code = sanitized.product_code;
+    if (typeof code === "string") {
+      const trimmed = code.trim();
+      if (trimmed === "" || trimmed === "-" || trimmed === "—") {
+        sanitized.product_code = null;
+      } else {
+        sanitized.product_code = trimmed;
+      }
+    } else if (code === undefined || code === null) {
+      sanitized.product_code = null;
+    }
+  }
+
   const { data, error } = await supabase
     .from("products")
-    .insert([{ ...rest, client_id: CLIENT_ID }])
+    .insert([{ ...sanitized, client_id: CLIENT_ID }])
     .select()
     .single();
 
@@ -79,24 +101,88 @@ export async function insertProduct(product: any) {
   return data;
 }
 
-export async function updateProduct(productId: any, updates: any) {
+export async function updateProduct(productId: any, updates: any = {}) {
+  console.log('RUNNING VERSION 2 - TIMESTAMP: 2026-07-12T05:12:15-07:00');
+  console.log('updateProduct called with productId:', productId, 'updates:', JSON.stringify(updates));
   const { id: _, created_at, updated_at, ...rest } = updates;
   
+  // Cast boolean fields safely to prevent Postgres string-to-boolean cast errors
+  const booleanFields = [
+    "assurance_layer",
+    "laggard_layer",
+    "show_in_display_room",
+    "show_in_gallery",
+    "show_in_showroom",
+    "show_in_seasonal_promo",
+    "show_in_sale_room",
+    "show_in_workbook_room",
+    "is_featured",
+    "needs_verification",
+    "floor_display",
+    "members_only",
+    "is_draft"
+  ];
+  
+  const sanitizedUpdates = { ...rest };
+  if ("product_code" in sanitizedUpdates) {
+    const code = sanitizedUpdates.product_code;
+    if (typeof code === "string") {
+      const trimmed = code.trim();
+      if (trimmed === "" || trimmed === "-" || trimmed === "—") {
+        sanitizedUpdates.product_code = null;
+      } else {
+        sanitizedUpdates.product_code = trimmed;
+      }
+    } else if (code === undefined || code === null) {
+      sanitizedUpdates.product_code = null;
+    }
+  }
+
+  for (const field of booleanFields) {
+    if (field in sanitizedUpdates) {
+      const val = sanitizedUpdates[field];
+      if (typeof val === "string") {
+        sanitizedUpdates[field] = val.toLowerCase() === "yes" || val.toLowerCase() === "true";
+      } else if (val === null || val === undefined) {
+        sanitizedUpdates[field] = false;
+      } else {
+        sanitizedUpdates[field] = Boolean(val);
+      }
+    }
+  }
+
+  if ("row_number" in sanitizedUpdates) {
+    const val = sanitizedUpdates.row_number;
+    if (val === "" || val === null || val === undefined) {
+      delete sanitizedUpdates.row_number;
+    } else {
+      const num = Number(val);
+      if (isNaN(num)) {
+        delete sanitizedUpdates.row_number;
+      } else {
+        sanitizedUpdates.row_number = num;
+      }
+    }
+  }
+
   let realId: any = null;
   const isNumeric = productId && !isNaN(Number(productId));
   
   if (!isNumeric) {
     // Non-numeric ID (like def-0, csv-131, imp-5). Attempt to find existing product by product_code or row_number
-    let query = supabase.from("products").select("id").eq("client_id", CLIENT_ID);
-    
-    if (updates.product_code && updates.product_code !== "—" && updates.product_code !== "-") {
-      const { data } = await query.eq("product_code", updates.product_code).limit(1);
+    if (sanitizedUpdates.product_code) {
+      const { data } = await supabase
+        .from("products")
+        .select("id")
+        .eq("client_id", CLIENT_ID)
+        .eq("product_code", sanitizedUpdates.product_code)
+        .limit(1);
       if (data && data.length > 0) {
         realId = data[0].id;
       }
     }
     
-    if (!realId && updates.row_number) {
+    if (!realId && updates.row_number && !isNaN(Number(updates.row_number))) {
       const { data } = await supabase
         .from("products")
         .select("id")
@@ -111,34 +197,52 @@ export async function updateProduct(productId: any, updates: any) {
     realId = Number(productId);
   }
 
+  console.log('Resolved realId:', realId, 'isNumeric:', isNumeric);
+
   if (realId) {
     const { data, error } = await supabase
       .from("products")
-      .update(rest)
+      .update(sanitizedUpdates)
       .eq("id", realId)
       .eq("client_id", CLIENT_ID)
-      .select()
-      .single();
+      .select();
 
     if (error) {
-      console.error("Update product error:", error);
-      throw error;
+      console.error("Update product error object:", JSON.stringify(error));
+      console.error("Update product error text:", error.message || error.code || error);
+      throw new Error(`Update product failed: ${error.message || error.code || JSON.stringify(error)}`);
     }
-    return data;
+
+    if (data && data.length > 0) {
+      return data[0];
+    } else {
+      console.log(`Product with ID ${realId} not found during update, inserting instead...`);
+      const { data: insertData, error: insertError } = await supabase
+        .from("products")
+        .insert([{ ...sanitizedUpdates, client_id: CLIENT_ID }])
+        .select();
+
+      if (insertError) {
+        console.error("Insert product fallback error object:", JSON.stringify(insertError));
+        console.error("Insert product fallback error text:", insertError.message || insertError.code || insertError);
+        throw new Error(`Insert fallback failed: ${insertError.message || insertError.code || JSON.stringify(insertError)}`);
+      }
+      return insertData?.[0] || null;
+    }
   } else {
     // Fallback: If we didn't find any matching product, insert it as a new product
     console.log("No product match found for non-numeric id, inserting as new product...");
     const { data, error } = await supabase
       .from("products")
-      .insert([{ ...rest, client_id: CLIENT_ID }])
-      .select()
-      .single();
+      .insert([{ ...sanitizedUpdates, client_id: CLIENT_ID }])
+      .select();
 
     if (error) {
-      console.error("Insert product fallback error:", error);
-      throw error;
+      console.error("Insert product fallback error object:", JSON.stringify(error));
+      console.error("Insert product fallback error text:", error.message || error.code || error);
+      throw new Error(`Insert failed: ${error.message || error.code || JSON.stringify(error)}`);
     }
-    return data;
+    return data?.[0] || null;
   }
 }
 
@@ -347,6 +451,33 @@ export async function insertFeedback(feedback: any) {
 }
 
 // Client channels operations
+export async function saveCompanyLogo(url: string) {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hitech_logo", website: url }, { onConflict: "client_id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Save logo error:", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchCompanyLogo() {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .select("website")
+    .eq("client_id", "hitech_logo")
+    .single();
+
+  if (error) {
+    return null;
+  }
+  return data?.website || null;
+}
+
 export async function fetchClientChannels() {
   const { data, error } = await supabase
     .from("client_channels")

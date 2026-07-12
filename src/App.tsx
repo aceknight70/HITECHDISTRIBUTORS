@@ -514,7 +514,20 @@ const ProductDetailOverlay = ({
         show_in_sale_room: !!updatedProduct.promo,
         show_in_seasonal_promo: !!updatedProduct.newp
       };
-      await db.updateProduct(docId, mapped);
+      const saved = await db.updateProduct(docId, mapped);
+      if (saved && saved.id) {
+        const savedId = String(saved.id);
+        if (savedId !== updatedProduct.id) {
+          const oldId = updatedProduct.id;
+          updatedProduct.id = savedId;
+          setSelectedProduct(updatedProduct as any);
+          if (isSolar && setSolarProducts) {
+            setSolarProducts(prev => prev.map(item => item.id === oldId ? updatedProduct as any : item));
+          } else {
+            setProducts(prev => prev.map(item => item.id === oldId ? updatedProduct as Product : item));
+          }
+        }
+      }
       setSaveStatus("✅ Image saved successfully!");
       setHasUnsavedChanges(false);
       setTimeout(() => setSaveStatus(null), 3000);
@@ -564,15 +577,21 @@ const ProductDetailOverlay = ({
         show_in_seasonal_promo: !!prod.newp
       };
 
-      await db.updateProduct(docId, mapped);
+      const saved = await db.updateProduct(docId, mapped);
       
       const isSolar = solarProducts && solarProducts.some(item => item.id === selectedProduct.id);
-      if (isSolar && setSolarProducts) {
-        setSolarProducts(prev => prev.map(item => item.id === selectedProduct.id ? selectedProduct as any : item));
-      } else {
-        setProducts(prev => prev.map(item => item.id === selectedProduct.id ? selectedProduct as Product : item));
+      let updatedProduct = { ...prod };
+      if (saved && saved.id) {
+        updatedProduct.id = String(saved.id);
       }
 
+      if (isSolar && setSolarProducts) {
+        setSolarProducts(prev => prev.map(item => item.id === selectedProduct.id ? updatedProduct as any : item));
+      } else {
+        setProducts(prev => prev.map(item => item.id === selectedProduct.id ? updatedProduct as Product : item));
+      }
+
+      setSelectedProduct(updatedProduct);
       setSaveStatus("✅ Changes saved successfully!");
       setHasUnsavedChanges(false);
       
@@ -948,9 +967,9 @@ export default function App() {
       const blob = await base64ToBlob(compressedBase64);
       const publicUrl = await uploadToSupabaseStorage(blob, file.name);
 
-      localStorage.setItem("ht_company_logo", publicUrl);
+      await db.saveCompanyLogo(publicUrl);
       window.dispatchEvent(new Event("ht_logo_updated"));
-      setLogoUploadStatus("✅ Logo uploaded successfully!");
+      setLogoUploadStatus("✅ Logo saved!");
     } catch (err: any) {
       console.error("Logo upload failed:", err);
       setLogoUploadStatus("❌ Failed: " + err.message);
@@ -1252,9 +1271,9 @@ export default function App() {
             bullets: p.description_bullets || "",
             sp: p.technical_specs || "",
             price: p.price || "CALL",
-            assuranceLayer: p.assurance_layer || "No",
+            assuranceLayer: p.assurance_layer ? "Yes" : "No",
             assuranceText: p.assurance_text || "",
-            laggardLayer: p.laggard_layer || "No",
+            laggardLayer: p.laggard_layer ? "Yes" : "No",
             laggardPromoText: p.laggard_promo_text || "",
             imgManual: p.main_image_url || "",
             imgFront: p.front_image_url || "",
@@ -2421,9 +2440,9 @@ Issue: ${escDesc}`;
                bullets: p.description_bullets || "",
                sp: p.technical_specs || "",
                price: p.price || "CALL",
-               assuranceLayer: p.assurance_layer || "No",
+               assuranceLayer: p.assurance_layer ? "Yes" : "No",
                assuranceText: p.assurance_text || "",
-               laggardLayer: p.laggard_layer || "No",
+               laggardLayer: p.laggard_layer ? "Yes" : "No",
                laggardPromoText: p.laggard_promo_text || "",
                imgManual: p.main_image_url || "",
                imgFront: p.front_image_url || "",

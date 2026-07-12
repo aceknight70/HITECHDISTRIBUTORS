@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
+import { fetchCompanyLogo } from "../lib/supabase";
 
 interface HitechLogoProps {
   size?: "sm" | "md" | "lg";
@@ -10,21 +11,28 @@ export const HitechLogo: React.FC<HitechLogoProps> = ({ size = "md", className =
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    const localLogo = localStorage.getItem("ht_company_logo");
-    if (localLogo) {
-      setLogoUrl(localLogo);
-    }
+    let mounted = true;
+    const loadLogo = async () => {
+      try {
+        const url = await fetchCompanyLogo();
+        if (mounted && url) {
+          setLogoUrl(url);
+        }
+      } catch (e) {
+        // Fallback or ignore
+      }
+    };
+    
+    loadLogo();
 
     const handleStorageChange = () => {
-      const updatedLogo = localStorage.getItem("ht_company_logo");
-      setLogoUrl(updatedLogo);
+      loadLogo();
     };
 
-    window.addEventListener("storage", handleStorageChange);
     window.addEventListener("ht_logo_updated", handleStorageChange);
 
     return () => {
-      window.removeEventListener("storage", handleStorageChange);
+      mounted = false;
       window.removeEventListener("ht_logo_updated", handleStorageChange);
     };
   }, []);
