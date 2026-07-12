@@ -941,6 +941,20 @@ export default function App() {
   const [compareSelectMode, setCompareSelectMode] = useState<1 | 2 | null>(null);
   const [compareSearch1, setCompareSearch1] = useState("");
   const [compareSearch2, setCompareSearch2] = useState("");
+  const defaultPresets = {
+    hitech_preset_1: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+    hitech_preset_2: "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80",
+    hitech_preset_3: "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80"
+  };
+
+  const [presets, setPresets] = useState<{ [key: string]: string }>(() => {
+    const local = localStorage.getItem("ht_storefront_presets");
+    if (local) {
+      try { return JSON.parse(local); } catch (e) {}
+    }
+    return defaultPresets;
+  });
+
   const [storefrontImage, setStorefrontImage] = useState<string>(() => {
     const local = localStorage.getItem("ht_storefront_image");
     if (local) {
@@ -978,27 +992,35 @@ export default function App() {
     }
   };
 
-  const handleStorefrontPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePresetUpload = (presetId: string) => async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus("📤 Processing image...");
+    setUploadStatus(`📤 Processing image for ${presetId}...`);
 
     try {
-      // Step 1: Compress locally to lightweight Base64 instantly
       const compressedBase64 = await compressImageToBase64(file);
       const blob = await base64ToBlob(compressedBase64);
-
-      // Step 2: Upload to Supabase Storage
       const publicUrl = await uploadToSupabaseStorage(blob, file.name);
 
-      setStorefrontImage(publicUrl);
-      await db.saveStorefrontBanner(publicUrl);
-      setUploadStatus("✅ Saved! Custom photo is now the active banner.");
+      await db.saveStorefrontPreset(presetId, publicUrl);
+      
+      const newPresets = { ...presets, [presetId]: publicUrl };
+      setPresets(newPresets);
+      localStorage.setItem("ht_storefront_presets", JSON.stringify(newPresets));
+
+      // If this preset was the active banner, update the active banner too
+      if (storefrontImage === presets[presetId]) {
+        setStorefrontImage(publicUrl);
+        localStorage.setItem("ht_storefront_image", publicUrl);
+        await db.saveStorefrontBanner(publicUrl);
+      }
+
+      setUploadStatus(`✅ Saved! Replaced image for ${presetId}.`);
     } catch (err: any) {
-      console.error("Storefront upload failed:", err);
-      setUploadStatus("❌ Failed to process storefront image: " + err.message);
+      console.error("Preset upload failed:", err);
+      setUploadStatus("❌ Failed to process preset image: " + err.message);
     } finally {
       setIsUploading(false);
     }
@@ -1418,11 +1440,24 @@ export default function App() {
           }
         } catch (e) {}
 
-        // Step 8: Fetch Storefront Banner
+        // Step 8: Fetch Storefront Banner & Presets
         try {
           const banner = await db.fetchStorefrontBanner();
           if (banner) {
             setStorefrontImage(banner);
+            localStorage.setItem("ht_storefront_image", banner);
+          }
+
+          const fetchedPresets = await db.fetchStorefrontPresets();
+          if (fetchedPresets && fetchedPresets.length > 0) {
+            const presetMap = { ...defaultPresets };
+            for (const p of fetchedPresets) {
+              if (p.client_id && p.website) {
+                presetMap[p.client_id] = p.website;
+              }
+            }
+            setPresets(presetMap);
+            localStorage.setItem("ht_storefront_presets", JSON.stringify(presetMap));
           }
         } catch (e) {}
 
@@ -4641,84 +4676,60 @@ Issue: ${escDesc}`;
                         </div>
                       </div>
 
-                      {/* Upload button */}
-                      <div className="flex flex-col gap-2">
-                        <label className={`w-full py-2.5 px-3 border border-dashed border-slate-700 hover:border-blue-500 rounded-lg flex items-center justify-center gap-2 cursor-pointer bg-slate-950/40 text-[var(--cr)] transition-all ${isUploading ? "opacity-50 pointer-events-none" : ""}`}>
-                          <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                          </svg>
-                          <span className="text-xs font-bold uppercase tracking-wider">
-                            {isUploading ? "Uploading..." : "Upload Photo from Device"}
-                          </span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={handleStorefrontPhotoUpload} 
-                          />
-                        </label>
-                        {uploadStatus && (
-                          <p className={`text-[10px] font-mono text-center ${uploadStatus.toLowerCase().includes("error") ? "text-red-400" : "text-emerald-400"}`}>
-                            {uploadStatus}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Preset Buttons */}
-                      <div className="flex flex-col gap-1.5 mt-1">
-                        <span className="text-[9px] font-mono text-[var(--mu)] uppercase">Quick Select Presets:</span>
-                        <div className="grid grid-cols-1 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const img = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
-                              setStorefrontImage(img);
-                              setUploadStatus("📤 Saving preset...");
-                              try {
-                                await db.saveStorefrontBanner(img);
-                                setUploadStatus("✅ Saved! Flagship Building Facade preset is now active.");
-                              } catch (e) {
-                                setUploadStatus("❌ Failed to save preset");
-                              }
-                            }}
-                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
-                          >
-                            🏢 Flagship Building Facade (Unsplash)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const img = "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80";
-                              setStorefrontImage(img);
-                              setUploadStatus("📤 Saving preset...");
-                              try {
-                                await db.saveStorefrontBanner(img);
-                                setUploadStatus("✅ Saved! Tech Showroom Interior preset is now active.");
-                              } catch (e) {
-                                setUploadStatus("❌ Failed to save preset");
-                              }
-                            }}
-                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
-                          >
-                            💻 Tech Showroom Interior (Unsplash)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const img = "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80";
-                              setStorefrontImage(img);
-                              setUploadStatus("📤 Saving preset...");
-                              try {
-                                await db.saveStorefrontBanner(img);
-                                setUploadStatus("✅ Saved! Modern Devices preset is now active.");
-                              } catch (e) {
-                                setUploadStatus("❌ Failed to save preset");
-                              }
-                            }}
-                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
-                          >
-                            🔌 Modern Devices Preset (Unsplash)
-                          </button>
+                      {/* Presets Grid */}
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] font-mono text-[var(--mu)] uppercase">Banner Slots (Click to activate, icon to replace):</span>
+                          {uploadStatus && (
+                            <span className={`text-[9px] font-mono truncate max-w-[200px] ${uploadStatus.toLowerCase().includes("error") ? "text-red-400" : "text-emerald-400"}`}>
+                              {uploadStatus}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          {[
+                            { id: "hitech_preset_1", label: "Slot 1" },
+                            { id: "hitech_preset_2", label: "Slot 2" },
+                            { id: "hitech_preset_3", label: "Slot 3" }
+                          ].map(preset => {
+                            const imgUrl = presets[preset.id];
+                            const isActive = storefrontImage === imgUrl;
+                            return (
+                              <div key={preset.id} className={`relative flex flex-col rounded border overflow-hidden bg-slate-950 ${isActive ? "border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "border-slate-800"}`}>
+                                <div 
+                                  className="h-20 w-full relative cursor-pointer group"
+                                  onClick={async () => {
+                                    setStorefrontImage(imgUrl);
+                                    localStorage.setItem("ht_storefront_image", imgUrl);
+                                    setUploadStatus(`📤 Activating ${preset.label}...`);
+                                    try {
+                                      await db.saveStorefrontBanner(imgUrl);
+                                      setUploadStatus(`✅ Saved! ${preset.label} is active.`);
+                                    } catch (e) {
+                                      setUploadStatus("❌ Failed to activate");
+                                    }
+                                  }}
+                                >
+                                  <img src={imgUrl} alt={preset.label} className="w-full h-full object-cover brightness-75 group-hover:brightness-100 transition-all" />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-[10px] font-bold text-white uppercase tracking-wider">{isActive ? "Active" : "Set Active"}</span>
+                                  </div>
+                                </div>
+                                <div className="bg-slate-900/50 p-1.5 flex justify-between items-center border-t border-slate-800">
+                                  <span className={`text-[9px] font-mono truncate ${isActive ? "text-emerald-400 font-bold" : "text-slate-400"}`}>
+                                    {preset.label}
+                                  </span>
+                                  <label className={`cursor-pointer px-2 py-1 flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 transition-colors ${isUploading ? "opacity-50 pointer-events-none" : ""}`} title="Upload new photo for this slot">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                    </svg>
+                                    <span className="text-[9px] uppercase font-bold tracking-wider">Replace</span>
+                                    <input type="file" accept="image/*" className="hidden" onChange={handlePresetUpload(preset.id)} />
+                                  </label>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

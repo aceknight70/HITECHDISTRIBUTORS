@@ -478,6 +478,32 @@ export async function fetchStorefrontBanner() {
   return data?.website || null;
 }
 
+export async function fetchStorefrontPresets() {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .select("client_id, website")
+    .in("client_id", ["hitech_preset_1", "hitech_preset_2", "hitech_preset_3"]);
+
+  if (error || !data) {
+    return [];
+  }
+  return data;
+}
+
+export async function saveStorefrontPreset(presetId: string, url: string) {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: presetId, website: url }, { onConflict: "client_id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Save preset error:", error);
+    throw error;
+  }
+  return data;
+}
+
 export async function saveCompanyLogo(url: string) {
   const { data, error } = await supabase
     .from("client_channels")
