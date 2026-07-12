@@ -994,8 +994,8 @@ export default function App() {
       const publicUrl = await uploadToSupabaseStorage(blob, file.name);
 
       setStorefrontImage(publicUrl);
-      localStorage.setItem("ht_storefront_image", publicUrl);
-      setUploadStatus("✅ Storefront image uploaded permanently to Supabase storage!");
+      await db.saveStorefrontBanner(publicUrl);
+      setUploadStatus("✅ Saved! Custom photo is now the active banner.");
     } catch (err: any) {
       console.error("Storefront upload failed:", err);
       setUploadStatus("❌ Failed to process storefront image: " + err.message);
@@ -1415,6 +1415,14 @@ export default function App() {
           const channels = await db.fetchClientChannels();
           if (channels && channels.whatsapp) {
             localStorage.setItem("ht_whatsapp_channel", channels.whatsapp);
+          }
+        } catch (e) {}
+
+        // Step 8: Fetch Storefront Banner
+        try {
+          const banner = await db.fetchStorefrontBanner();
+          if (banner) {
+            setStorefrontImage(banner);
           }
         } catch (e) {}
 
@@ -2674,13 +2682,11 @@ Issue: ${escDesc}`;
               alt="HiTech Distributors Facade"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover object-center brightness-95 hover:brightness-100 transition-all duration-300"
-              onError={() => {
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
                 const primaryFallback = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
-                const secondaryFallback = "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80";
-                if (storefrontImage !== primaryFallback) {
-                  setStorefrontImage(primaryFallback);
-                } else {
-                  setStorefrontImage(secondaryFallback);
+                if (target.src !== primaryFallback) {
+                  target.src = primaryFallback;
                 }
               }}
             />
@@ -4619,7 +4625,15 @@ Issue: ${escDesc}`;
                             value={storefrontImage}
                             onChange={(e) => {
                               setStorefrontImage(e.target.value);
-                              localStorage.setItem("ht_storefront_image", e.target.value);
+                            }}
+                            onBlur={async (e) => {
+                              setUploadStatus("📤 Saving custom URL...");
+                              try {
+                                await db.saveStorefrontBanner(e.target.value);
+                                setUploadStatus("✅ Saved! Custom URL is now the active banner.");
+                              } catch (err) {
+                                setUploadStatus("❌ Failed to save custom URL");
+                              }
                             }}
                             placeholder="Paste image URL here..."
                             className="w-full bg-slate-950 border border-slate-800 text-[11px] text-[var(--cr)] rounded p-1.5 outline-none font-mono"
@@ -4659,10 +4673,15 @@ Issue: ${escDesc}`;
                             onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80";
                               setStorefrontImage(img);
-                              localStorage.setItem("ht_storefront_image", img);
-                              setUploadStatus("Selected premium storefront preset!");
+                              setUploadStatus("📤 Saving preset...");
+                              try {
+                                await db.saveStorefrontBanner(img);
+                                setUploadStatus("✅ Saved! Flagship Building Facade preset is now active.");
+                              } catch (e) {
+                                setUploadStatus("❌ Failed to save preset");
+                              }
                             }}
-                            className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
+                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
                           >
                             🏢 Flagship Building Facade (Unsplash)
                           </button>
@@ -4671,10 +4690,15 @@ Issue: ${escDesc}`;
                             onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
-                              localStorage.setItem("ht_storefront_image", img);
-                              setUploadStatus("Selected clean showroom preset!");
+                              setUploadStatus("📤 Saving preset...");
+                              try {
+                                await db.saveStorefrontBanner(img);
+                                setUploadStatus("✅ Saved! Tech Showroom Interior preset is now active.");
+                              } catch (e) {
+                                setUploadStatus("❌ Failed to save preset");
+                              }
                             }}
-                            className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
+                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
                           >
                             💻 Tech Showroom Interior (Unsplash)
                           </button>
@@ -4683,10 +4707,15 @@ Issue: ${escDesc}`;
                             onClick={async () => {
                               const img = "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80";
                               setStorefrontImage(img);
-                              localStorage.setItem("ht_storefront_image", img);
-                              setUploadStatus("Selected tech devices preset!");
+                              setUploadStatus("📤 Saving preset...");
+                              try {
+                                await db.saveStorefrontBanner(img);
+                                setUploadStatus("✅ Saved! Modern Devices preset is now active.");
+                              } catch (e) {
+                                setUploadStatus("❌ Failed to save preset");
+                              }
                             }}
-                            className="py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border border-slate-800 font-mono text-slate-300 truncate cursor-pointer"
+                            className={`py-1 px-2.5 bg-slate-950 hover:bg-slate-900 text-left rounded text-[10px] border font-mono truncate cursor-pointer ${storefrontImage === "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=600&q=80" ? "border-emerald-500 text-emerald-400 font-bold" : "border-slate-800 text-slate-300"}`}
                           >
                             🔌 Modern Devices Preset (Unsplash)
                           </button>

@@ -451,6 +451,33 @@ export async function insertFeedback(feedback: any) {
 }
 
 // Client channels operations
+export async function saveStorefrontBanner(url: string) {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hitech_banner", website: url }, { onConflict: "client_id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Save banner error:", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchStorefrontBanner() {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .select("website")
+    .eq("client_id", "hitech_banner")
+    .single();
+
+  if (error) {
+    return null;
+  }
+  return data?.website || null;
+}
+
 export async function saveCompanyLogo(url: string) {
   const { data, error } = await supabase
     .from("client_channels")
