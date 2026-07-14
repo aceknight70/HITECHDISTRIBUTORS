@@ -955,6 +955,15 @@ export default function App() {
     return defaultPresets;
   });
 
+  const defaultTheme = { primary: "#3b82f6", bg: "#f8fafc", accent: "#0284c7" };
+  const [theme, setTheme] = useState<{ primary: string, bg: string, accent: string }>(() => {
+    const local = localStorage.getItem("ht_theme");
+    if (local) {
+      try { return JSON.parse(local); } catch (e) {}
+    }
+    return defaultTheme;
+  });
+
   const [storefrontImage, setStorefrontImage] = useState<string>(() => {
     const local = localStorage.getItem("ht_storefront_image");
     if (local) {
@@ -968,6 +977,13 @@ export default function App() {
 
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState("");
+
+  const [bulkPhotos, setBulkPhotos] = useState<File[]>([]);
+  const [currentBulkIndex, setCurrentBulkIndex] = useState(0);
+  const [bulkTagSearchTerm, setBulkTagSearchTerm] = useState("");
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkStatusMsg, setBulkStatusMsg] = useState("");
+  const [bulkCompletedCount, setBulkCompletedCount] = useState(0);
 
   const handleLogoPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1458,6 +1474,16 @@ export default function App() {
             }
             setPresets(presetMap);
             localStorage.setItem("ht_storefront_presets", JSON.stringify(presetMap));
+          }
+        } catch (e) {}
+
+        // Step 9: Fetch Theme Settings
+        try {
+          const fetchedThemeStr = await db.fetchThemeSettings();
+          if (fetchedThemeStr) {
+            const fetchedTheme = JSON.parse(fetchedThemeStr);
+            setTheme(fetchedTheme);
+            localStorage.setItem("ht_theme", JSON.stringify(fetchedTheme));
           }
         } catch (e) {}
 
@@ -2342,6 +2368,97 @@ Issue: ${escDesc}`;
     return rows;
   };
 
+  const handleThemeSave = async () => {
+    setStaffActionStatus("📤 Saving theme...");
+    try {
+      await db.saveThemeSettings(JSON.stringify(theme));
+      localStorage.setItem("ht_theme", JSON.stringify(theme));
+      setStaffActionStatus("✅ Theme Saved!");
+      setTimeout(() => setStaffActionStatus(null), 3000);
+    } catch (err: any) {
+      console.error("Theme save failed:", err);
+      setStaffActionStatus("❌ Failed to save theme: " + err.message);
+    }
+  };
+
+  const handleThemeReset = () => {
+    setTheme(defaultTheme);
+  };
+
+  const handleBulkPhotosSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setBulkPhotos(Array.from(files));
+      setCurrentBulkIndex(0);
+      setBulkCompletedCount(0);
+      setBulkStatusMsg("");
+      setBulkTagSearchTerm("");
+    }
+    e.target.value = '';
+  };
+
+  const handleBulkSkip = () => {
+    if (currentBulkIndex < bulkPhotos.length - 1) {
+      setCurrentBulkIndex(prev => prev + 1);
+      setBulkTagSearchTerm("");
+      setBulkStatusMsg("");
+    } else {
+      setBulkStatusMsg(`All ${bulkCompletedCount} photos saved!`);
+      setTimeout(() => {
+        setBulkPhotos([]);
+      }, 3000);
+    }
+  };
+
+  const handleBulkConfirm = async (product: Product) => {
+    if (isBulkUploading) return;
+    
+    setIsBulkUploading(true);
+    setBulkStatusMsg("📤 Compressing & Uploading...");
+    
+    try {
+      const file = bulkPhotos[currentBulkIndex];
+      const compressedBase64 = await compressImageToBase64(file);
+      const blob = await base64ToBlob(compressedBase64);
+      const publicUrl = await uploadToSupabaseStorage(blob, file.name);
+
+      const dbSlots = ["main_image_url", "front_image_url", "side_image_url", "back_image_url", "top_image_url"];
+      const localSlots = ["imgManual", "imgFront", "imgSide", "imgBack", "imgTop"];
+      let emptyDbSlot = "";
+      let emptyLocalSlot = "";
+      for (let i = 0; i < localSlots.length; i++) {
+        if (!product[localSlots[i] as keyof Product]) {
+          emptyDbSlot = dbSlots[i];
+          emptyLocalSlot = localSlots[i];
+          break;
+        }
+      }
+
+      if (!emptyDbSlot) {
+        throw new Error("No empty image slots left for this product.");
+      }
+
+      const updates = { [emptyDbSlot]: publicUrl };
+      await db.updateProduct(product.id, updates);
+      
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, [emptyLocalSlot]: publicUrl } : p));
+      setBulkCompletedCount(prev => prev + 1);
+      
+      if (currentBulkIndex < bulkPhotos.length - 1) {
+        setCurrentBulkIndex(prev => prev + 1);
+        setBulkTagSearchTerm("");
+        setBulkStatusMsg("");
+      } else {
+        setBulkStatusMsg(`✅ All ${bulkCompletedCount + 1} photos saved!`);
+      }
+    } catch (err: any) {
+      console.error("Bulk upload error:", err);
+      setBulkStatusMsg(`❌ Failed: ${err.message}`);
+    } finally {
+      setIsBulkUploading(false);
+    }
+  };
+
   const handleCsvImport = async () => {
     if (!csvText.trim()) {
       setCsvStatus("Please enter CSV sheet text.");
@@ -2673,7 +2790,15 @@ Issue: ${escDesc}`;
   };
 
   return (
-    <div id="app" className="flex flex-col min-h-screen text-[var(--cr)] overflow-x-hidden font-sans bg-[var(--dk)]">
+    <>
+      <style>{`
+        :root {
+          --rd: ${theme.primary} !important;
+          --yl: ${theme.accent} !important;
+          --dk: ${theme.bg} !important;
+        }
+      `}</style>
+      <div id="app" className="flex flex-col min-h-screen text-[var(--cr)] overflow-x-hidden font-sans bg-[var(--dk)]">
       
       {!inStore ? (
         // 3.3 Landing Page - Editorial Aesthetic
@@ -4734,6 +4859,53 @@ Issue: ${escDesc}`;
                       </div>
                     </div>
 
+                    {/* Theme Customizer Form */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Theme Customizer</h4>
+                      <p className="text-[10px] text-[var(--mu)]">Customize the look and feel of the storefront.</p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest">Primary Color</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={theme.primary} onChange={e => setTheme({ ...theme, primary: e.target.value })} className="w-8 h-8 rounded cursor-pointer border border-slate-800 p-0" />
+                            <span className="text-xs font-mono text-slate-400">{theme.primary}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest">Background Color</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={theme.bg} onChange={e => setTheme({ ...theme, bg: e.target.value })} className="w-8 h-8 rounded cursor-pointer border border-slate-800 p-0" />
+                            <span className="text-xs font-mono text-slate-400">{theme.bg}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest">Accent Color</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={theme.accent} onChange={e => setTheme({ ...theme, accent: e.target.value })} className="w-8 h-8 rounded cursor-pointer border border-slate-800 p-0" />
+                            <span className="text-xs font-mono text-slate-400">{theme.accent}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={handleThemeSave} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold uppercase tracking-wider transition-colors">
+                          Save Theme
+                        </button>
+                        <button onClick={handleThemeReset} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-bold uppercase tracking-wider transition-colors">
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Fast Bulk Photo Tagging */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Fast Bulk Photo Tagging</h4>
+                      <p className="text-[10px] text-[var(--mu)]">Select multiple photos from your device and quickly assign them to products.</p>
+                      <label className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold uppercase tracking-wider text-center cursor-pointer transition-colors block">
+                        Select Photos to Tag
+                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleBulkPhotosSelected} />
+                      </label>
+                    </div>
+
                     {/* Google Sheet CSV Import Form */}
                     <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
                       <h4 className="font-bold text-xs text-[var(--yl)] uppercase">Load Product Catalog via CSV</h4>
@@ -5646,7 +5818,91 @@ Issue: ${escDesc}`;
         addToCart={addToCart}
         WA_SALES={WA_SALES}
       />
+
+      {/* Bulk Tagging Overlay */}
+      {bulkPhotos.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 flex flex-col items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-4 flex flex-col gap-4">
+            {currentBulkIndex < bulkPhotos.length ? (
+              <>
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <h3 className="text-white font-bold text-sm uppercase tracking-wider">
+                    Tag Photo {currentBulkIndex + 1} of {bulkPhotos.length}
+                  </h3>
+                  <button onClick={() => setBulkPhotos([])} className="text-slate-400 hover:text-white text-xs font-bold uppercase">Cancel</button>
+                </div>
+
+                <div className="bg-black rounded-lg overflow-hidden flex items-center justify-center h-48 border border-slate-800">
+                  <img 
+                    src={URL.createObjectURL(bulkPhotos[currentBulkIndex])} 
+                    alt="To Tag" 
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Search Product to Assign To</label>
+                  <input 
+                    type="text" 
+                    value={bulkTagSearchTerm}
+                    onChange={(e) => setBulkTagSearchTerm(e.target.value)}
+                    placeholder="Type name or P/N..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none text-sm focus:border-emerald-500 font-mono"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto max-h-48 flex flex-col gap-1 pr-1 custom-scrollbar">
+                  {products
+                    .filter(p => !bulkTagSearchTerm || p.n?.toLowerCase().includes(bulkTagSearchTerm.toLowerCase()) || p.pn?.toLowerCase().includes(bulkTagSearchTerm.toLowerCase()) || String(p.displayOrder).includes(bulkTagSearchTerm))
+                    .slice(0, 20)
+                    .map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleBulkConfirm(p)}
+                        disabled={isBulkUploading}
+                        className="w-full text-left bg-slate-800 hover:bg-slate-700 p-2.5 rounded border border-slate-700 text-xs text-slate-200 transition-colors disabled:opacity-50 flex flex-col gap-1"
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="font-bold text-emerald-400 font-mono truncate">{p.pn || "N/A"}</span>
+                          {p.displayOrder && <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded font-mono border border-slate-700">No. {p.displayOrder}</span>}
+                        </div>
+                        <span className="truncate">{p.n}</span>
+                      </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2 border-t border-slate-800 mt-2">
+                  <button 
+                    onClick={handleBulkSkip}
+                    disabled={isBulkUploading}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded text-xs font-bold uppercase disabled:opacity-50 tracking-wider"
+                  >
+                    Skip Photo
+                  </button>
+                  {bulkStatusMsg && (
+                    <p className={`text-center text-[11px] font-mono mt-1 ${bulkStatusMsg.includes("❌") ? "text-red-400" : "text-emerald-400"}`}>
+                      {bulkStatusMsg}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-4 py-8">
+                <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl font-bold border border-emerald-500/30">
+                  ✓
+                </div>
+                <h3 className="text-white font-bold uppercase tracking-wider text-center text-sm">{bulkStatusMsg || "All photos processed!"}</h3>
+                <button onClick={() => setBulkPhotos([])} className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-3 rounded font-bold uppercase tracking-wider text-xs">
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
+    </>
   );
 }
 

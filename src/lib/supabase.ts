@@ -19,8 +19,24 @@ const CLIENT_ID = "hitech";
 
 // Helper to convert base64 to Blob for storage uploads
 export async function base64ToBlob(base64: string): Promise<Blob> {
-  const res = await fetch(base64);
-  return await res.blob();
+  try {
+    const parts = base64.split(';base64,');
+    if (parts.length !== 2) {
+      throw new Error('Invalid base64 format');
+    }
+    const contentType = parts[0].split(':')[1] || 'image/jpeg';
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
+  } catch (e) {
+    console.warn("Manual base64 decode failed, falling back to fetch", e);
+    const res = await fetch(base64);
+    return await res.blob();
+  }
 }
 
 // Upload file to 'hitech-images' public bucket
@@ -502,6 +518,33 @@ export async function saveStorefrontPreset(presetId: string, url: string) {
     throw error;
   }
   return data;
+}
+
+export async function saveThemeSettings(settings: string) {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hitech_theme", website: settings }, { onConflict: "client_id" })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Save theme error:", error);
+    throw error;
+  }
+  return data;
+}
+
+export async function fetchThemeSettings() {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .select("website")
+    .eq("client_id", "hitech_theme")
+    .single();
+
+  if (error) {
+    return null;
+  }
+  return data?.website || null;
 }
 
 export async function saveCompanyLogo(url: string) {
