@@ -1539,22 +1539,13 @@ export default function App() {
             // Seed defaults if empty
             try {
               const defaults = [
-                { name: "Jotra", url: "https://jotra.com", active: true, clickCount: 0 },
-                { name: "Ugomenz", url: "https://ugomenz.com", active: true, clickCount: 0 }
+                { id: "ad-1", name: "Jotra", url: "https://jotra.com", active: true, clickCount: 0 },
+                { id: "ad-2", name: "Ugomenz", url: "https://ugomenz.com", active: true, clickCount: 0 }
               ];
-              for (const d of defaults) {
-                await db.addHubletAd(d);
-              }
-              const newAds = await db.fetchHubletAds();
-              if (newAds && newAds.length > 0) {
-                setHubletAds(newAds.map((ad: any) => ({
-                  id: ad.id,
-                  name: ad.name,
-                  url: ad.url,
-                  active: ad.active,
-                  clickCount: ad.clickCount || 0
-                })));
-              }
+              // Write once directly to avoid race conditions and multiple trigger events
+              await supabase.from("client_channels").upsert({ client_id: "hublet_ads", website: JSON.stringify(defaults) }, { onConflict: "client_id" });
+              
+              setHubletAds(defaults);
             } catch (err) {
               console.error("Seed hublet_ads error:", err);
             }
@@ -4826,9 +4817,9 @@ Issue: ${escDesc}`;
                           </div>
                         ))}
                         
-                        <div className="mt-4 mb-2">
+                        <div className="mt-4 mb-2 overflow-x-hidden">
                           <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3">Partner Engagement (Clicks)</h5>
-                          <div className="w-full h-[200px] bg-slate-950 p-4 border border-slate-800 rounded">
+                          <div className="w-full h-[200px] bg-slate-950 p-4 border border-slate-800 rounded min-w-0 min-h-0 overflow-hidden">
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={hubletAds} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
