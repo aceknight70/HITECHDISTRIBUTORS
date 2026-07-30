@@ -19,24 +19,8 @@ const CLIENT_ID = "hitech";
 
 // Helper to convert base64 to Blob for storage uploads
 export async function base64ToBlob(base64: string): Promise<Blob> {
-  try {
-    const parts = base64.split(';base64,');
-    if (parts.length !== 2) {
-      throw new Error('Invalid base64 format');
-    }
-    const contentType = parts[0].split(':')[1] || 'image/jpeg';
-    const raw = window.atob(parts[1]);
-    const rawLength = raw.length;
-    const uInt8Array = new Uint8Array(rawLength);
-    for (let i = 0; i < rawLength; ++i) {
-      uInt8Array[i] = raw.charCodeAt(i);
-    }
-    return new Blob([uInt8Array], { type: contentType });
-  } catch (e) {
-    console.warn("Manual base64 decode failed, falling back to fetch", e);
-    const res = await fetch(base64);
-    return await res.blob();
-  }
+  const res = await fetch(base64);
+  return await res.blob();
 }
 
 // Upload file to 'hitech-images' public bucket
@@ -69,6 +53,74 @@ export async function uploadToSupabaseStorage(fileOrBlob: File | Blob, originalN
     .getPublicUrl(uniqueName);
 
   return publicUrl;
+}
+
+export async function fetchHubletAds() {
+  const { data, error } = await supabase
+    .from("client_channels")
+    .select("website")
+    .eq("client_id", "hublet_ads")
+    .single();
+
+  if (error) {
+    if (error.code !== "PGRST116") {
+      console.error("Fetch hublet_ads error:", error);
+    }
+    return [];
+  }
+  
+  if (data?.website) {
+    try {
+      return JSON.parse(data.website);
+    } catch (e) {
+      console.error("Parse hublet_ads error:", e);
+      return [];
+    }
+  }
+  return [];
+}
+
+export async function addHubletAd(ad: any) {
+  const currentAds = await fetchHubletAds();
+  const newAd = ad.id ? ad : { ...ad, id: "ad-" + Date.now() + Math.floor(Math.random() * 1000) };
+  const updatedAds = [...currentAds, newAd];
+  
+  const { error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hublet_ads", website: JSON.stringify(updatedAds) }, { onConflict: "client_id" });
+
+  if (error) {
+    console.error("Insert hublet_ads error:", error);
+    throw error;
+  }
+}
+
+export async function toggleHubletAd(id: string, active: boolean) {
+  const currentAds = await fetchHubletAds();
+  const updatedAds = currentAds.map((ad: any) => ad.id === id ? { ...ad, active } : ad);
+  
+  const { error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hublet_ads", website: JSON.stringify(updatedAds) }, { onConflict: "client_id" });
+
+  if (error) {
+    console.error("Update hublet_ads error:", error);
+    throw error;
+  }
+}
+
+export async function incrementHubletAdClick(id: string) {
+  const currentAds = await fetchHubletAds();
+  const updatedAds = currentAds.map((ad: any) => ad.id === id ? { ...ad, clickCount: (ad.clickCount || 0) + 1 } : ad);
+  
+  const { error } = await supabase
+    .from("client_channels")
+    .upsert({ client_id: "hublet_ads", website: JSON.stringify(updatedAds) }, { onConflict: "client_id" });
+
+  if (error) {
+    console.error("Increment hublet_ads click error:", error);
+    throw error;
+  }
 }
 
 // Products operations

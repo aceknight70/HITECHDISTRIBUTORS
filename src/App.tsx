@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import {
   Laptop,
   Printer,
@@ -57,7 +58,8 @@ import {
   GraduationCap,
   Play,
   Edit,
-  Moon
+  Moon,
+  Users
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase, base64ToBlob, uploadToSupabaseStorage } from "./lib/supabase";
@@ -515,17 +517,19 @@ const ProductDetailOverlay = ({
         show_in_seasonal_promo: !!updatedProduct.newp
       };
       const saved = await db.updateProduct(docId, mapped);
-      if (saved && saved.id) {
-        const savedId = String(saved.id);
-        if (savedId !== updatedProduct.id) {
-          const oldId = updatedProduct.id;
-          updatedProduct.id = savedId;
-          setSelectedProduct(updatedProduct as any);
-          if (isSolar && setSolarProducts) {
-            setSolarProducts(prev => prev.map(item => item.id === oldId ? updatedProduct as any : item));
-          } else {
-            setProducts(prev => prev.map(item => item.id === oldId ? updatedProduct as Product : item));
-          }
+      if (saved) {
+        updatedProduct.id = String(saved.id);
+        updatedProduct.imgManual = saved.main_image_url || updatedProduct.imgManual;
+        updatedProduct.imgFront = saved.front_image_url || updatedProduct.imgFront;
+        updatedProduct.imgSide = saved.side_image_url || updatedProduct.imgSide;
+        updatedProduct.imgBack = saved.back_image_url || updatedProduct.imgBack;
+        updatedProduct.imgTop = saved.top_image_url || updatedProduct.imgTop;
+        
+        setSelectedProduct(updatedProduct as any);
+        if (isSolar && setSolarProducts) {
+          setSolarProducts(prev => prev.map(item => item.id === selectedProduct.id ? updatedProduct as any : item));
+        } else {
+          setProducts(prev => prev.map(item => item.id === selectedProduct.id ? updatedProduct as Product : item));
         }
       }
       setSaveStatus("✅ Image saved successfully!");
@@ -581,8 +585,13 @@ const ProductDetailOverlay = ({
       
       const isSolar = solarProducts && solarProducts.some(item => item.id === selectedProduct.id);
       let updatedProduct = { ...prod };
-      if (saved && saved.id) {
+      if (saved) {
         updatedProduct.id = String(saved.id);
+        updatedProduct.imgManual = saved.main_image_url || updatedProduct.imgManual;
+        updatedProduct.imgFront = saved.front_image_url || updatedProduct.imgFront;
+        updatedProduct.imgSide = saved.side_image_url || updatedProduct.imgSide;
+        updatedProduct.imgBack = saved.back_image_url || updatedProduct.imgBack;
+        updatedProduct.imgTop = saved.top_image_url || updatedProduct.imgTop;
       }
 
       if (isSolar && setSolarProducts) {
@@ -941,6 +950,59 @@ export default function App() {
   const [compareSelectMode, setCompareSelectMode] = useState<1 | 2 | null>(null);
   const [compareSearch1, setCompareSearch1] = useState("");
   const [compareSearch2, setCompareSearch2] = useState("");
+
+  // Manager Hub State
+  const [partnerAds, setPartnerAds] = useState<Record<string, boolean>>({
+    hp: true,
+    dell: true,
+    lenovo: true,
+    apc: true,
+    felicity: true
+  });
+  const [managerPIN, setManagerPIN] = useState("");
+  const [managerIsLoggedIn, setManagerIsLoggedIn] = useState(false);
+  const [managerError, setManagerError] = useState("");
+  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ads" | "staff" | "directory" | "sheets">("menu");
+
+  const [hubletAds, setHubletAds] = useState([
+    { id: "jotra", name: "Jotra", url: "https://jotra.com", active: true },
+    { id: "ugomenz", name: "Ugomenz", url: "https://ugomenz.com", active: true }
+  ]);
+  const [newHubletName, setNewHubletName] = useState("");
+  const [newHubletUrl, setNewHubletUrl] = useState("");
+  const [addingHublet, setAddingHublet] = useState(false);
+
+  const [staffDirectory, setStaffDirectory] = useState([
+    { id: "HTD-001", name: "Alice K.", role: "Sales Rep" },
+    { id: "HTD-002", name: "Mark T.", role: "Technical Support" },
+    { id: "HTD-003", name: "Sarah L.", role: "Manager" }
+  ]);
+
+  // Weekly Performance State
+  const [performanceLogs, setPerformanceLogs] = useState<any[]>([
+    {
+      id: "log-1",
+      staffName: "Alice K.",
+      date: new Date().toISOString().split('T')[0],
+      baseTaskCount: 10,
+      eduLink: "https://tiktok.com/@hitech/123",
+      eduViews: "1.2k",
+      entLink: "https://ig.com/p/456",
+      entViews: "800",
+      conversionNote: "Customer bought an HP Envy from my video",
+      approved: false
+    }
+  ]);
+  const [perfForm, setPerfForm] = useState({
+    staffName: "",
+    baseTaskCount: 0,
+    eduLink: "",
+    eduViews: "",
+    entLink: "",
+    entViews: "",
+    conversionNote: ""
+  });
+
   const defaultPresets = {
     hitech_preset_1: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
     hitech_preset_2: "https://images.unsplash.com/photo-1468495244123-6c6c332eeece?auto=format&fit=crop&w=600&q=80",
@@ -1342,7 +1404,13 @@ export default function App() {
               sp: s.sp,
               price: s.price,
               desc: s.desc,
-              displayOrder: s.displayOrder
+              displayOrder: s.displayOrder,
+              imgManual: s.imgManual,
+              imgFront: s.imgFront,
+              imgSide: s.imgSide,
+              imgBack: s.imgBack,
+              imgTop: s.imgTop,
+              imgVideo: s.imgVideo
             })));
           }
         }
@@ -1456,6 +1524,45 @@ export default function App() {
           }
         } catch (e) {}
 
+        // Step 7.5: Fetch Hublet Ads
+        try {
+          const ads = await db.fetchHubletAds();
+          if (ads && ads.length > 0) {
+            setHubletAds(ads.map((ad: any) => ({
+              id: ad.id,
+              name: ad.name,
+              url: ad.url,
+              active: ad.active,
+              clickCount: ad.clickCount || 0
+            })));
+          } else {
+            // Seed defaults if empty
+            try {
+              const defaults = [
+                { name: "Jotra", url: "https://jotra.com", active: true, clickCount: 0 },
+                { name: "Ugomenz", url: "https://ugomenz.com", active: true, clickCount: 0 }
+              ];
+              for (const d of defaults) {
+                await db.addHubletAd(d);
+              }
+              const newAds = await db.fetchHubletAds();
+              if (newAds && newAds.length > 0) {
+                setHubletAds(newAds.map((ad: any) => ({
+                  id: ad.id,
+                  name: ad.name,
+                  url: ad.url,
+                  active: ad.active,
+                  clickCount: ad.clickCount || 0
+                })));
+              }
+            } catch (err) {
+              console.error("Seed hublet_ads error:", err);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to load hublet_ads", e);
+        }
+
         // Step 8: Fetch Storefront Banner & Presets
         try {
           const banner = await db.fetchStorefrontBanner();
@@ -1546,7 +1653,13 @@ export default function App() {
            sp: s.sp,
            price: s.price,
            desc: s.desc,
-           displayOrder: s.displayOrder
+           displayOrder: s.displayOrder,
+           imgManual: s.imgManual,
+           imgFront: s.imgFront,
+           imgSide: s.imgSide,
+           imgBack: s.imgBack,
+           imgTop: s.imgTop,
+           imgVideo: (s as any).imgVideo
          } as any);
        }
     });
@@ -2333,6 +2446,16 @@ Issue: ${escDesc}`;
     }
   };
 
+  const handleManagerLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setManagerError("");
+    if (managerPIN === "admin" || managerPIN === "0000") {
+      setManagerIsLoggedIn(true);
+    } else {
+      setManagerError("Invalid Manager PIN.");
+    }
+  };
+
   // CSV Google Sheets sheet importer parser
   const parseCsvRow = (text: string) => {
     const rows: string[][] = [];
@@ -2459,7 +2582,7 @@ Issue: ${escDesc}`;
     }
   };
 
-  const handleCsvImport = async () => {
+  const handleCsvImport = async (mode: "replace" | "append" = "replace") => {
     if (!csvText.trim()) {
       setCsvStatus("Please enter CSV sheet text.");
       return;
@@ -2580,11 +2703,28 @@ Issue: ${escDesc}`;
              };
            });
 
-           const { error } = await supabase
-             .from("products")
-             .upsert(mappedProducts);
+           let finalProducts = mappedProducts;
+           let skippedCount = 0;
+           
+           if (mode === "append") {
+             finalProducts = mappedProducts.filter(p => !p.id);
+             skippedCount = mappedProducts.length - finalProducts.length;
+           }
 
-           if (error) throw error;
+           const productsToUpsert = finalProducts.map(p => {
+             const copy = { ...p };
+             if (copy.id === undefined || copy.id === null) {
+               delete copy.id;
+             }
+             return copy;
+           });
+
+           if (productsToUpsert.length > 0) {
+             const { error } = await supabase
+               .from("products")
+               .upsert(productsToUpsert);
+             if (error) throw error;
+           }
            
            // Fetch the updated list of products from DB to get the new real IDs assigned to them
            const supabaseProducts = await db.fetchProducts();
@@ -2627,10 +2767,14 @@ Issue: ${escDesc}`;
            }
            
            setCurrentPreset("LAST IMPORTED SHEET");
-           setCsvStatus(`✅ Data saved successfully! All products and images are stored permanently.`);
+           if (mode === "append") {
+             setCsvStatus(`✅ Added ${finalProducts.length} new items. Skipped ${skippedCount} existing items.`);
+           } else {
+             setCsvStatus(`✅ Data saved successfully! All products and images are stored permanently.`);
+           }
         } catch (err: any) {
            console.error("Supabase sheet save error:", err);
-           setCsvStatus("❌ Failed to save data: " + err.message);
+           setCsvStatus("❌ Failed to save data: " + (err.message || err.code || JSON.stringify(err)));
         }
       } else {
         setCsvStatus("Could not parse any valid rows. Ensure format matches the template.");
@@ -2832,6 +2976,34 @@ Issue: ${escDesc}`;
             >
               Active Deployment: Lagos/Warri SFO_92
             </motion.p>
+            
+            {/* Partner Badges */}
+            <div className="flex gap-2 mt-4 flex-wrap">
+              {Object.entries(partnerAds).filter(([brand, isVisible]) => isVisible).map(([brand]) => (
+                <span key={brand} className="px-2.5 py-1 text-[9px] font-bold text-white uppercase tracking-wider bg-slate-800 rounded shadow-sm border border-slate-700">
+                  {brand}
+                </span>
+              ))}
+            </div>
+
+            {/* Partner Spotlight / Hublets */}
+            <div className="flex gap-3 mt-3 overflow-x-auto pb-2 scrollbar-hide">
+              {hubletAds.filter(ad => ad.active).map(ad => (
+                <button 
+                  key={ad.id}
+                  onClick={() => {
+                    db.incrementHubletAdClick(ad.id).catch(e => console.error(e));
+                    window.open(ad.url, '_blank');
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-700 hover:border-blue-500 transition-colors shadow-sm whitespace-nowrap group"
+                >
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shadow-inner group-hover:scale-110 transition-transform">
+                    {ad.name.charAt(0)}
+                  </div>
+                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">{ad.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
 
@@ -3011,7 +3183,7 @@ Issue: ${escDesc}`;
                     </div>
 
                     <div className="flex flex-col gap-4">
-                      {displayedProducts.filter(p => p.cat === activeCategory).map((p, index) => (
+                      {(activeCategory === "printers" ? products : displayedProducts).filter(p => p.cat === activeCategory).map((p, index) => (
                         <ProductCard key={p.id} p={p} index={products.indexOf(p)} onAdd={addToCart} onView={setSelectedProduct} displayPrice={getDisplayPrice(p)} />
                       ))}
                     </div>
@@ -3664,14 +3836,17 @@ Issue: ${escDesc}`;
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
-                      { title: "Front Desk & General Support", name: "Ese", num: "+2347032724432", email: "hitechdistributors@gmail.com", color: "bg-[#1a73e8]", icon: <Building className="w-5 h-5 text-white" /> },
-                      { title: "Sales & Order Department", name: "Lucy", num: "09166241953", email: "hitechdistributors@gmail.com", color: "bg-[#34a853]", icon: <ShoppingCart className="w-5 h-5 text-white" /> },
-                      { title: "Live Video Call Request", name: "Sophie", num: "+2348144824531", email: "hitechdistributors@gmail.com", color: "bg-[#9c27b0]", icon: <Video className="w-5 h-5 text-white" /> },
-                      { title: "Repairs & Logistics Tracker", name: "Ruth", num: "+2348034832773", email: "hitechdistributors@gmail.com", color: "bg-[#fa7b17]", icon: <Wrench className="w-5 h-5 text-white" /> },
-                      { title: "Pocket Store App Support", name: "Fortune", num: "+2349052127886", email: "hitechdistributors@gmail.com", color: "bg-[#009688]", icon: <Smartphone className="w-5 h-5 text-white" /> }
+                      { title: "Front Desk & General Support", name: "Ese", num: "+2347032724432", email: "hitechdistributors@gmail.com", color: "bg-[#1a73e8]", icon: <Building className="w-5 h-5 text-white" />, staffId: "HTD-014" },
+                      { title: "Sales & Order Department", name: "Lucy", num: "09166241953", email: "hitechdistributors@gmail.com", color: "bg-[#34a853]", icon: <ShoppingCart className="w-5 h-5 text-white" />, staffId: "HTD-027" },
+                      { title: "Live Video Call Request", name: "Sophie", num: "+2348144824531", email: "hitechdistributors@gmail.com", color: "bg-[#9c27b0]", icon: <Video className="w-5 h-5 text-white" />, staffId: "HTD-019" },
+                      { title: "Repairs & Logistics Tracker", name: "Ruth", num: "+2348034832773", email: "hitechdistributors@gmail.com", color: "bg-[#fa7b17]", icon: <Wrench className="w-5 h-5 text-white" />, staffId: "HTD-031" },
+                      { title: "Pocket Store App Support", name: "Fortune", num: "+2349052127886", email: "hitechdistributors@gmail.com", color: "bg-[#009688]", icon: <Smartphone className="w-5 h-5 text-white" />, staffId: "HTD-042" }
                     ].map((card, i) => (
-                      <div key={i} className="flex flex-col bg-white border border-[#1a2a4a] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                        <div className={`${card.color} p-2 flex items-center gap-2`}>
+                      <div key={i} className="flex flex-col bg-white border border-[#1a2a4a] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow relative">
+                        <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-black/10 rounded text-[8px] font-mono font-bold text-white uppercase backdrop-blur-sm z-10 border border-white/20">
+                          ID: {card.staffId}
+                        </div>
+                        <div className={`${card.color} p-2 flex items-center gap-2 relative z-0 pr-16`}>
                           {card.icon}
                           <h4 className="font-bold text-white text-xs leading-tight">{card.title}</h4>
                         </div>
@@ -3937,7 +4112,7 @@ Issue: ${escDesc}`;
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     disabled={chatLoading}
-                    className="flex-grow bg-slate-950 rounded-lg border border-slate-800 text-xs px-3 py-2.5 text-[var(--cr)] outline-none"
+                    className="flex-grow bg-white rounded-lg border border-slate-300 text-black text-xs px-3 py-2.5 outline-none placeholder:text-gray-500"
                   />
                   <button type="submit" disabled={chatLoading} className="p-2.5 bg-[var(--rd)] hover:bg-red-600 rounded-lg text-white">
                     <Send className="w-4 h-4" />
@@ -4018,6 +4193,40 @@ Issue: ${escDesc}`;
                     </button>
                   </motion.div>
                 )}
+
+                <div className="mt-6 flex flex-col gap-4">
+                  <h4 className="font-black text-sm text-black uppercase tracking-widest mb-2 flex items-center gap-2 border-b-4 border-[#1a2a4a] pb-2">
+                    <Sun className="w-4 h-4 text-black" /> Solar Catalog
+                  </h4>
+                  {displayedSolarProducts.map((p, index) => (
+                    <ProductCard
+                      key={p.id}
+                      p={{
+                        id: p.id,
+                        pn: "",
+                        cat: p.cat.toLowerCase(),
+                        n: p.n,
+                        brand: p.brand,
+                        sp: p.sp,
+                        price: p.price,
+                        desc: p.desc,
+                        displayOrder: p.displayOrder,
+                        imgManual: p.imgManual,
+                        imgFront: p.imgFront,
+                        imgSide: p.imgSide,
+                        imgBack: p.imgBack,
+                        imgTop: p.imgTop,
+                        imgVideo: (p as any).imgVideo,
+                        assuranceLayer: (p as any).assuranceLayer,
+                        laggardLayer: (p as any).laggardLayer
+                      } as any}
+                      index={solarProducts.indexOf(p)}
+                      onAdd={(mappedP) => addToCart(mappedP)}
+                      onView={(mappedP) => setSelectedProduct(p as any)}
+                      displayPrice={getDisplayPrice(p as any)}
+                    />
+                  ))}
+                </div>
               </motion.div>
             )}
 
@@ -4252,15 +4461,17 @@ Issue: ${escDesc}`;
                       placeholder="Paste CSV rows from Google Sheets (e.g. P/N,Category,Name,Spec,Price,Description,Promo,New)"
                       value={csvText}
                       onChange={(e) => setCsvText(e.target.value)}
-                      className="border border-slate-800 text-xs rounded-lg p-2 outline-none font-mono text-[10px] w-full"
-                      style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
+                      className="border border-slate-300 bg-white text-black text-xs rounded-lg p-2 outline-none font-mono text-[10px] w-full"
                     />
                     <div className="flex gap-2">
-                      <button onClick={handleCsvImport} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
-                         📤 UPLOAD GOOGLE SHEET
+                      <button onClick={() => handleCsvImport("replace")} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
+                         📤 REPLACE ALL
                       </button>
-                      <button className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded text-xs font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2 border border-slate-700">
-                         📥 DOWNLOAD TEMPLATE
+                      <button onClick={() => handleCsvImport("append")} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
+                         ➕ ADD TO CATALOGUE
+                      </button>
+                      <button className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2 border border-slate-700">
+                         📥 TEMPLATE
                       </button>
                     </div>
                     {csvStatus && <p className="text-[10px] text-emerald-400 font-mono">{csvStatus}</p>}
@@ -4283,8 +4494,7 @@ Issue: ${escDesc}`;
                     placeholder="🔍 Search full spreadsheet data..."
                     value={sheetSearch}
                     onChange={(e) => setSheetSearch(e.target.value)}
-                    className="w-full border border-slate-800 text-xs rounded-lg p-3 outline-none"
-                    style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
+                    className="w-full border border-slate-300 bg-white text-black text-xs rounded-lg p-3 outline-none placeholder:text-gray-500"
                   />
                   <div className="flex gap-2">
                     <button className="flex-1 py-2 bg-slate-800 rounded border border-slate-700 text-[10px] font-bold text-white uppercase tracking-wider">
@@ -4480,8 +4690,7 @@ Issue: ${escDesc}`;
                         <input
                           type="text"
                           defaultValue={field.val}
-                          className="w-full border border-slate-800 text-xs rounded-lg p-2.5 outline-none font-mono"
-                          style={{ color: "#1a1a2e", backgroundColor: "#f8fafc" }}
+                          className="w-full border border-slate-300 bg-white text-black text-xs rounded-lg p-2.5 outline-none font-mono"
                         />
                       </div>
                     ))}
@@ -4509,6 +4718,239 @@ Issue: ${escDesc}`;
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* Manager Room */}
+            {currentRoom === "manager" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
+                <Teleprompter text="Welcome to the Master Control Hub. Authorized Managers only. Configure home screen partner badges, review staff logs, or manage sheets." />
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
+                  <h3 className="text-emerald-500 font-bold text-base flex items-center gap-2">
+                    <Settings className="w-5 h-5" /> Manager Control Hub
+                  </h3>
+                  <p className="text-xs text-[var(--mu)]">Extensible dashboard for top-level operational configurations.</p>
+                </div>
+
+                {!managerIsLoggedIn ? (
+                  <form onSubmit={handleManagerLogin} className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Master PIN</p>
+                    <input
+                      type="password"
+                      placeholder="Enter Manager PIN"
+                      value={managerPIN}
+                      onChange={(e) => setManagerPIN(e.target.value)}
+                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-3 outline-none text-center font-mono tracking-widest text-lg"
+                    />
+                    {managerError && <p className="text-xs text-red-500 font-mono text-center">{managerError}</p>}
+                    <button type="submit" className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-bold text-white uppercase tracking-wider">
+                      Unlock Master Hub →
+                    </button>
+                    <p className="text-[10px] text-slate-500 text-center mt-1">Hint: Try 'admin' or '0000'</p>
+                  </form>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-center p-3 bg-slate-900 border border-[var(--border)] rounded-xl">
+                      <span className="font-bold text-emerald-400 font-mono text-xs">Logged In: MANAGER</span>
+                      <button onClick={() => {setManagerIsLoggedIn(false); setActiveManagerTab("menu");}} className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase">Logout</button>
+                    </div>
+
+                    {activeManagerTab === "menu" && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <button onClick={() => setActiveManagerTab("ads")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Globe className="w-6 h-6 text-blue-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Partner Ads</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Toggle home screen badges</p>
+                          </div>
+                        </button>
+                        <button onClick={() => setActiveManagerTab("staff")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Lock className="w-6 h-6 text-purple-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Staff Logs</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">View performance reviews</p>
+                          </div>
+                        </button>
+                        <button onClick={() => setActiveManagerTab("directory")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Users className="w-6 h-6 text-amber-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Directory</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">View staff roster</p>
+                          </div>
+                        </button>
+                        <button onClick={() => setCurrentRoom("sheets")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Database className="w-6 h-6 text-emerald-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Sheet Manager</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Full access to catalog CSV sync</p>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+
+                    {activeManagerTab === "ads" && (
+                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+                          <h4 className="font-bold text-[13px] text-white uppercase">Partner Ads Configuration</h4>
+                          <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
+                        </div>
+                        <h5 className="text-[10px] uppercase font-bold text-slate-400 mt-2">Display Floor Tags</h5>
+                        {Object.keys(partnerAds).map(brand => (
+                          <div key={brand} className="flex justify-between items-center p-3 bg-slate-950 border border-slate-800 rounded">
+                            <span className="text-xs font-bold uppercase text-white">{brand}</span>
+                            <button
+                              onClick={() => setPartnerAds(prev => ({...prev, [brand]: !prev[brand]}))}
+                              className={`w-10 h-5 rounded-full relative transition-colors ${partnerAds[brand] ? "bg-emerald-500" : "bg-slate-700"}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${partnerAds[brand] ? "left-[22px]" : "left-0.5"}`} />
+                            </button>
+                          </div>
+                        ))}
+                        <h5 className="text-[10px] uppercase font-bold text-slate-400 mt-4">Hublet Partner Spotlights</h5>
+                        {hubletAds.map(ad => (
+                          <div key={ad.id} className="flex justify-between items-center p-3 bg-slate-950 border border-slate-800 rounded">
+                            <span className="text-xs font-bold uppercase text-white">{ad.name} Hublet</span>
+                            <button
+                              onClick={async () => {
+                                const newActive = !ad.active;
+                                setHubletAds(prev => prev.map(p => p.id === ad.id ? {...p, active: newActive} : p));
+                                try {
+                                  await db.toggleHubletAd(ad.id, newActive);
+                                } catch (e) {
+                                  console.error("Failed to toggle hublet ad", e);
+                                }
+                              }}
+                              className={`w-10 h-5 rounded-full relative transition-colors ${ad.active ? "bg-emerald-500" : "bg-slate-700"}`}
+                            >
+                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ad.active ? "left-[22px]" : "left-0.5"}`} />
+                            </button>
+                          </div>
+                        ))}
+                        
+                        <div className="mt-4 mb-2">
+                          <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3">Partner Engagement (Clicks)</h5>
+                          <div className="w-full h-[200px] bg-slate-950 p-4 border border-slate-800 rounded">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={hubletAds} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                                <Tooltip 
+                                  cursor={{ fill: '#1e293b' }} 
+                                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px', color: '#f8fafc' }}
+                                />
+                                <Bar dataKey="clickCount" radius={[4, 4, 0, 0]}>
+                                  {hubletAds.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.active ? '#3b82f6' : '#64748b'} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded flex flex-col gap-2">
+                          <h6 className="text-[10px] uppercase font-bold text-[var(--mu)]">Add New Partner</h6>
+                          <input type="text" placeholder="Partner Name (e.g. Acme)" value={newHubletName} onChange={e => setNewHubletName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-2 outline-none font-mono" />
+                          <input type="url" placeholder="URL (e.g. https://acme.com)" value={newHubletUrl} onChange={e => setNewHubletUrl(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-2 outline-none font-mono" />
+                          <button 
+                            disabled={addingHublet || !newHubletName || !newHubletUrl}
+                            onClick={async () => {
+                              try {
+                                setAddingHublet(true);
+                                await db.addHubletAd({ name: newHubletName, url: newHubletUrl, active: true, clickCount: 0 });
+                                const refreshedAds = await db.fetchHubletAds();
+                                setHubletAds(refreshedAds.map((a: any) => ({
+                                  id: a.id,
+                                  name: a.name,
+                                  url: a.url,
+                                  active: a.active,
+                                  clickCount: a.clickCount || 0
+                                })));
+                                setNewHubletName("");
+                                setNewHubletUrl("");
+                              } catch (e) {
+                                console.error("Error adding hublet", e);
+                              } finally {
+                                setAddingHublet(false);
+                              }
+                            }}
+                            className="w-full py-2 mt-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 rounded text-xs font-bold text-white uppercase transition-colors">
+                            {addingHublet ? "Adding..." : "Add Partner"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeManagerTab === "staff" && (
+                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+                          <h4 className="font-bold text-[13px] text-white uppercase">Staff Performance Logs</h4>
+                          <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
+                        </div>
+                        <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto">
+                          {performanceLogs.length === 0 && (
+                            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-center text-[10px] text-[var(--mu)] font-mono italic">
+                              No weekly logs submitted yet.
+                            </div>
+                          )}
+                          {performanceLogs.map(log => (
+                            <div key={log.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-2">
+                              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                <h5 className="text-[11px] font-bold text-white uppercase">{log.staffName} <span className="text-slate-500 font-mono font-normal">[{log.date}]</span></h5>
+                                <button 
+                                  onClick={() => setPerformanceLogs(prev => prev.map(p => p.id === log.id ? {...p, approved: !p.approved} : p))}
+                                  className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors ${log.approved ? "bg-emerald-900/60 text-emerald-400 border border-emerald-800" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
+                                >
+                                  {log.approved ? "✓ Approved" : "Mark Approved"}
+                                </button>
+                              </div>
+                              <div className="grid grid-cols-1 gap-2 text-[10px]">
+                                <div className="flex flex-col">
+                                  <span className="text-blue-400 font-bold">1. Base Task</span>
+                                  <span className="text-slate-300">{log.baseTaskCount} catalog updates completed</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-emerald-400 font-bold">2. Educational Engine</span>
+                                  <span className="text-slate-300 truncate max-w-full"><a href={log.eduLink} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">{log.eduLink || "No link"}</a></span>
+                                  <span className="text-slate-400">Views/Engagements: {log.eduViews || "N/A"}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-purple-400 font-bold">3. Entertainment Engine</span>
+                                  <span className="text-slate-300 truncate max-w-full"><a href={log.entLink} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">{log.entLink || "No link"}</a></span>
+                                  <span className="text-slate-400">Views/Engagements: {log.entViews || "N/A"}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-amber-400 font-bold">4. Customer Conversion Engine</span>
+                                  <span className="text-slate-300 bg-slate-900 p-1.5 rounded break-words">{log.conversionNote || "N/A"}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {activeManagerTab === "directory" && (
+                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+                          <h4 className="font-bold text-[13px] text-white uppercase">Staff Directory</h4>
+                          <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
+                        </div>
+                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                          {staffDirectory.map(staff => (
+                            <div key={staff.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center">
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold text-white uppercase">{staff.name}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{staff.id}</span>
+                              </div>
+                              <span className="text-[10px] bg-slate-800 text-[var(--mu)] px-2 py-1 rounded border border-slate-700 uppercase tracking-wider">{staff.role}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
             )}
 
             {/* Shadow School Room */}
@@ -4930,6 +5372,67 @@ Issue: ${escDesc}`;
                         <button onClick={() => setStaffActionStatus(null)} className="text-emerald-400 hover:text-white font-bold px-1 text-[11px]">✕</button>
                       </div>
                     )}
+
+                    {/* Weekly Performance Log Tracker */}
+                    <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
+                      <h4 className="font-bold text-[13px] text-white uppercase border-b border-slate-800 pb-2 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-blue-400" /> WEEKLY PERFORMANCE LOG
+                      </h4>
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-[var(--mu)] tracking-widest mb-1 block">Staff Name *</label>
+                          <input type="text" value={perfForm.staffName} onChange={e => setPerfForm({...perfForm, staffName: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-2.5 outline-none font-mono" placeholder="e.g. Alice K." />
+                        </div>
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                          <h5 className="text-[11px] font-bold text-white uppercase mb-2 text-blue-300">1. Base Task (Catalogue)</h5>
+                          <label className="text-[10px] text-[var(--mu)] flex items-center justify-between">
+                            <span>Catalog Updates Completed (Target: 10)</span>
+                            <input type="number" min="0" value={perfForm.baseTaskCount} onChange={e => setPerfForm({...perfForm, baseTaskCount: parseInt(e.target.value) || 0})} className="w-16 bg-slate-950 border border-slate-700 text-xs text-white rounded p-1 text-center font-mono" />
+                          </label>
+                        </div>
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                          <h5 className="text-[11px] font-bold text-white uppercase mb-2 text-emerald-300">2. Educational Engine</h5>
+                          <div className="flex flex-col gap-2">
+                            <input type="url" value={perfForm.eduLink} onChange={e => setPerfForm({...perfForm, eduLink: e.target.value})} placeholder="Link to teaching post/video" className="w-full bg-slate-950 border border-slate-700 text-[10px] text-white rounded p-2 outline-none font-mono" />
+                            <input type="text" value={perfForm.eduViews} onChange={e => setPerfForm({...perfForm, eduViews: e.target.value})} placeholder="Views / Engagement Count (e.g. 1.2k views)" className="w-full bg-slate-950 border border-slate-700 text-[10px] text-white rounded p-2 outline-none font-mono" />
+                          </div>
+                        </div>
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                          <h5 className="text-[11px] font-bold text-white uppercase mb-2 text-purple-300">3. Entertainment Engine</h5>
+                          <div className="flex flex-col gap-2">
+                            <input type="url" value={perfForm.entLink} onChange={e => setPerfForm({...perfForm, entLink: e.target.value})} placeholder="Link to entertaining post/video" className="w-full bg-slate-950 border border-slate-700 text-[10px] text-white rounded p-2 outline-none font-mono" />
+                            <input type="text" value={perfForm.entViews} onChange={e => setPerfForm({...perfForm, entViews: e.target.value})} placeholder="Views / Engagement Count" className="w-full bg-slate-950 border border-slate-700 text-[10px] text-white rounded p-2 outline-none font-mono" />
+                          </div>
+                        </div>
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                          <h5 className="text-[11px] font-bold text-white uppercase mb-2 text-amber-300">4. Customer Conversion Engine</h5>
+                          <textarea value={perfForm.conversionNote} onChange={e => setPerfForm({...perfForm, conversionNote: e.target.value})} placeholder="Note or link showing a customer who bought/engaged because of your activity..." className="w-full bg-slate-950 border border-slate-700 text-[10px] text-white rounded p-2 outline-none font-mono min-h-[60px]" />
+                        </div>
+                        <button 
+                          onClick={() => {
+                            if (!perfForm.staffName) {
+                              setStaffActionStatus("❌ Staff name required!");
+                              setTimeout(() => setStaffActionStatus(null), 3000);
+                              return;
+                            }
+                            setPerformanceLogs(prev => [{
+                              id: `log-${Date.now()}`,
+                              date: new Date().toISOString().split('T')[0],
+                              ...perfForm,
+                              approved: false
+                            }, ...prev]);
+                            setPerfForm({
+                              staffName: "", baseTaskCount: 0, eduLink: "", eduViews: "", entLink: "", entViews: "", conversionNote: ""
+                            });
+                            setStaffActionStatus("✅ Weekly log submitted!");
+                            setTimeout(() => setStaffActionStatus(null), 3000);
+                          }}
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded text-xs font-bold text-white uppercase tracking-wider transition-colors"
+                        >
+                          Submit Weekly Log
+                        </button>
+                      </div>
+                    </div>
 
                     {/* Receipt Generation Form */}
                     <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
@@ -5629,7 +6132,7 @@ Issue: ${escDesc}`;
                 { id: "feedback", label: "Review", icon: <Star className="w-4 h-4" /> },
                 { id: "pickup", label: "Pickup", icon: <Calendar className="w-4 h-4" /> },
                 { id: "staff", label: "Staff", icon: <Lock className="w-4 h-4" /> },
-                { id: "sheets", label: "Sheets", icon: <Database className="w-4 h-4" /> },
+                { id: "manager", label: "Manager", icon: <Settings className="w-4 h-4" /> },
                 { id: "school", label: "School", icon: <GraduationCap className="w-4 h-4" /> }
               ].map((tab) => (
                 <button
