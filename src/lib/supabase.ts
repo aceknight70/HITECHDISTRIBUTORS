@@ -817,3 +817,324 @@ export async function seedProductsIfEmpty(initialProducts: any[], initialSolarPr
     console.error("Error seeding products table:", err);
   }
 }
+
+
+// ==========================================
+// HUBALLY & HUBTENANT DATA MODELS
+// ==========================================
+export interface HubAlly {
+  id: string;
+  ally_name: string;
+  business_type: string;
+  description: string;
+  logo_or_photo: string;
+  contact_info: any;
+  external_link: string;
+  referral_code: string;
+  status: string; // 'active' | 'inactive'
+  date_added: string;
+  // Locally tracked metrics
+  referral_count?: number; 
+}
+
+export interface HubTenant {
+  id: string;
+  tenant_name: string;
+  description: string;
+  category: string;
+  photos: string[];
+  contact_info: any;
+  invoicing_enabled: boolean;
+  referral_code: string;
+  pixel_id: string;
+  status: string; // 'active' | 'inactive'
+  date_added: string;
+  // Locally tracked metrics
+  referral_entries?: number;
+  discovery_entries?: number;
+}
+
+// Fallback logic helper
+async function readFallback(client_id: string) {
+  const { data, error } = await supabase.from("client_channels").select("website").eq("client_id", client_id).single();
+  if (data?.website) {
+    try { return JSON.parse(data.website); } catch(e) {}
+  }
+  return [];
+}
+async function writeFallback(client_id: string, payload: any) {
+  await supabase.from("client_channels").upsert({ client_id, website: JSON.stringify(payload) }, { onConflict: "client_id" });
+}
+
+export async function fetchHubAllies(): Promise<HubAlly[]> {
+  try {
+    const { data, error } = await supabase.from("hublet_allies").select("*");
+    if (!error && data) return data as HubAlly[];
+  } catch (e) {}
+  return await readFallback("hublet_allies_fallback") as HubAlly[];
+}
+
+export async function saveHubAlly(ally: HubAlly) {
+  try {
+    const { error } = await supabase.from("hublet_allies").upsert(ally);
+    if (!error) return;
+  } catch (e) {}
+  
+  // Fallback
+  const current = await readFallback("hublet_allies_fallback") as HubAlly[];
+  const updated = current.filter(a => a.id !== ally.id);
+  updated.push(ally);
+  await writeFallback("hublet_allies_fallback", updated);
+}
+
+export async function deleteHubAlly(id: string) {
+  try { await supabase.from("hublet_allies").delete().eq("id", id); } catch(e) {}
+  const current = await readFallback("hublet_allies_fallback") as HubAlly[];
+  await writeFallback("hublet_allies_fallback", current.filter(a => a.id !== id));
+}
+
+export async function fetchHubTenants(): Promise<HubTenant[]> {
+  try {
+    const { data, error } = await supabase.from("hublet_tenants").select("*");
+    if (!error && data) return data as HubTenant[];
+  } catch (e) {}
+  return await readFallback("hublet_tenants_fallback") as HubTenant[];
+}
+
+export async function saveHubTenant(tenant: HubTenant) {
+  try {
+    const { error } = await supabase.from("hublet_tenants").upsert(tenant);
+    if (!error) return;
+  } catch (e) {}
+  
+  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
+  const updated = current.filter(t => t.id !== tenant.id);
+  updated.push(tenant);
+  await writeFallback("hublet_tenants_fallback", updated);
+}
+
+export async function deleteHubTenant(id: string) {
+  try { await supabase.from("hublet_tenants").delete().eq("id", id); } catch(e) {}
+  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
+  await writeFallback("hublet_tenants_fallback", current.filter(t => t.id !== id));
+}
+
+export async function logAllyReferral(ally_id: string, referral_code: string) {
+  try {
+    await supabase.from("hublet_ally_referrals").insert({ ally_id, referral_code });
+  } catch (e) {}
+  
+  // Update local fallback count directly on the ally
+  const current = await readFallback("hublet_allies_fallback") as HubAlly[];
+  const updated = current.map(a => {
+    if (a.id === ally_id) {
+      return { ...a, referral_count: (a.referral_count || 0) + 1 };
+    }
+    return a;
+  });
+  await writeFallback("hublet_allies_fallback", updated);
+}
+
+export async function logTenantTraffic(tenant_id: string, referral_code: string, source_type: 'referral' | 'discovery') {
+  try {
+    await supabase.from("hublet_tenant_traffic").insert({ tenant_id, referral_code, source_type });
+  } catch(e) {}
+  
+  // Update local fallback
+  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
+  const updated = current.map(t => {
+    if (t.id === tenant_id) {
+      if (source_type === 'referral') {
+        return { ...t, referral_entries: (t.referral_entries || 0) + 1 };
+      } else {
+        return { ...t, discovery_entries: (t.discovery_entries || 0) + 1 };
+      }
+    }
+    return t;
+  });
+  await writeFallback("hublet_tenants_fallback", updated);
+}
+// ==========================================
+
+// -------------------------------------------------------------
+// MASTER SECTION API
+// -------------------------------------------------------------
+
+export interface MasterTimelineEntry {
+  id?: string;
+  client_id?: string;
+  month: string;
+  phase_label: string;
+  what_was_done: string;
+  what_was_achieved: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MasterEngine {
+  id?: string;
+  client_id?: string;
+  engine_name: string;
+  status: "Not Started" | "Building" | "Active" | "Weak/Unclear";
+  notes: string;
+  updated_at?: string;
+}
+
+export interface MasterTarget {
+  id?: string;
+  client_id?: string;
+  engine_name: string;
+  target_description: string;
+  progress_notes: string;
+  status: "Not Met" | "In Progress" | "Met";
+  updated_at?: string;
+}
+
+export interface MasterStaff {
+  id?: string;
+  client_id?: string;
+  staff_name: string;
+  role: string;
+  interest_level: "Engaged" | "Minimal" | "Not Participating";
+  notes: string;
+  updated_at?: string;
+}
+
+export interface MasterStaffLog {
+  id?: string;
+  staff_id: string;
+  activity_type: string;
+  description: string;
+  logged_at?: string;
+}
+
+export async function fetchMasterTimeline() {
+  const { data, error } = await supabase
+    .from("hitech_master_timeline")
+    .select("*")
+    .eq("client_id", CLIENT_ID)
+    .order("created_at", { ascending: false });
+  if (error) console.error("Error fetching master timeline:", error);
+  return data || [];
+}
+
+export async function upsertMasterTimeline(entry: MasterTimelineEntry) {
+  const { data, error } = await supabase
+    .from("hitech_master_timeline")
+    .upsert({ ...entry, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
+    .select();
+  if (error) console.error("Error saving master timeline:", error);
+  return data;
+}
+
+export async function fetchMasterEngines() {
+  const { data, error } = await supabase
+    .from("hitech_master_engines")
+    .select("*")
+    .eq("client_id", CLIENT_ID)
+    .order("engine_name", { ascending: true });
+  if (error) console.error("Error fetching master engines:", error);
+  return data || [];
+}
+
+export async function upsertMasterEngine(engine: MasterEngine) {
+  const { data, error } = await supabase
+    .from("hitech_master_engines")
+    .upsert({ ...engine, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
+    .select();
+  if (error) console.error("Error saving master engine:", error);
+  return data;
+}
+
+export async function fetchMasterTargets() {
+  const { data, error } = await supabase
+    .from("hitech_master_targets")
+    .select("*")
+    .eq("client_id", CLIENT_ID);
+  if (error) console.error("Error fetching master targets:", error);
+  return data || [];
+}
+
+export async function upsertMasterTarget(target: MasterTarget) {
+  const { data, error } = await supabase
+    .from("hitech_master_targets")
+    .upsert({ ...target, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
+    .select();
+  if (error) console.error("Error saving master target:", error);
+  return data;
+}
+
+export async function fetchMasterStaff() {
+  const { data, error } = await supabase
+    .from("hitech_staff_evaluation")
+    .select("*")
+    .eq("client_id", CLIENT_ID);
+  if (error) console.error("Error fetching master staff:", error);
+  return data || [];
+}
+
+export async function upsertMasterStaff(staff: MasterStaff) {
+  const { data, error } = await supabase
+    .from("hitech_staff_evaluation")
+    .upsert({ ...staff, client_id: CLIENT_ID, updated_at: new Date().toISOString() })
+    .select();
+  if (error) console.error("Error saving master staff:", error);
+  return data;
+}
+
+export async function deleteMasterTimelineEntry(id: string) {
+  await supabase.from("hitech_master_timeline").delete().eq("id", id);
+}
+
+export async function deleteMasterTarget(id: string) {
+  await supabase.from("hitech_master_targets").delete().eq("id", id);
+}
+
+export async function deleteMasterStaff(id: string) {
+  await supabase.from("hitech_staff_evaluation").delete().eq("id", id);
+}
+
+
+// -------------------------------------------------------------
+// MANAGE STAFF API
+// -------------------------------------------------------------
+
+export interface StaffWeeklyLog {
+  id?: string;
+  staff_id: string;
+  date_submitted: string;
+  base_catalog_updates: string | number;
+  base_ad_posts: string | number;
+  edu_link: string;
+  edu_views: string;
+  ent_link: string;
+  ent_views: string;
+  conv_note: string;
+  approval_status: "Pending" | "Approved";
+  approved_by?: string;
+  approved_at?: string;
+  created_at?: string;
+}
+
+export async function fetchWeeklyLogs() {
+  const { data, error } = await supabase
+    .from("hitech_weekly_logs")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) console.error("Error fetching weekly logs:", error);
+  return data || [];
+}
+
+export async function approveWeeklyLog(id: string, managerName: string) {
+  const { data, error } = await supabase
+    .from("hitech_weekly_logs")
+    .update({ 
+      approval_status: "Approved", 
+      approved_by: managerName, 
+      approved_at: new Date().toISOString() 
+    })
+    .eq("id", id)
+    .select();
+  if (error) console.error("Error approving weekly log:", error);
+  return data;
+}

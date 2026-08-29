@@ -59,13 +59,16 @@ import {
   Play,
   Edit,
   Moon,
-  Users
+  Users,
+  Store, Handshake, ExternalLink, Bot, ArrowLeft
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { supabase, base64ToBlob, uploadToSupabaseStorage } from "./lib/supabase";
+import ManagerManageStaff from "./components/ManagerManageStaff";
+import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, HubAlly, HubTenant } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
+import MasterSection from "./MasterSection";
 import { GalleryCard, getCategoryFallbackImage } from "./components/GalleryCard";
 
 // Global constant fallback config
@@ -931,6 +934,37 @@ export default function App() {
   };
 
   const handleBack = () => {
+    // Priority order for closing overlays/modals before navigating back
+    if (activeAllyModal) {
+      setActiveAllyModal(null);
+      return;
+    }
+    if (activeTenantSpace) {
+      setActiveTenantSpace(null);
+      return;
+    }
+    if (showAllyDirectory) {
+      setShowAllyDirectory(false);
+      return;
+    }
+    if (showTenantDirectory) {
+      setShowTenantDirectory(false);
+      return;
+    }
+    if (selectedProduct) {
+      setSelectedProduct(null);
+      return;
+    }
+    if (compareSelectMode) {
+      setCompareSelectMode(null);
+      return;
+    }
+    if (showComparison) {
+      setShowComparison(false);
+      return;
+    }
+    
+    // Normal back navigation
     if (roomHistory.length > 0) {
       const prevRoom = roomHistory[roomHistory.length - 1];
       setRoomHistory(prev => prev.slice(0, -1));
@@ -962,15 +996,18 @@ export default function App() {
   const [managerPIN, setManagerPIN] = useState("");
   const [managerIsLoggedIn, setManagerIsLoggedIn] = useState(false);
   const [managerError, setManagerError] = useState("");
-  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ads" | "staff" | "directory" | "sheets">("menu");
+  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ally" | "tenant" | "manage-staff" | "sheets">("menu");
 
-  const [hubletAds, setHubletAds] = useState([
-    { id: "jotra", name: "Jotra", url: "https://jotra.com", active: true },
-    { id: "ugomenz", name: "Ugomenz", url: "https://ugomenz.com", active: true }
-  ]);
-  const [newHubletName, setNewHubletName] = useState("");
-  const [newHubletUrl, setNewHubletUrl] = useState("");
-  const [addingHublet, setAddingHublet] = useState(false);
+  const [hubAllies, setHubAllies] = useState<HubAlly[]>([]);
+  const [hubTenants, setHubTenants] = useState<HubTenant[]>([]);
+  const [activeTenantSpace, setActiveTenantSpace] = useState<HubTenant | null>(null);
+  const [activeAllyModal, setActiveAllyModal] = useState<HubAlly | null>(null);
+  const [showAllyDirectory, setShowAllyDirectory] = useState(false);
+  const [showTenantDirectory, setShowTenantDirectory] = useState(false);
+  const [tenantEntryCode, setTenantEntryCode] = useState("");
+  // Manager Hub forms
+  const [addingAlly, setAddingAlly] = useState(false);
+  const [addingTenant, setAddingTenant] = useState(false);
 
   const [staffDirectory, setStaffDirectory] = useState([
     { id: "HTD-001", name: "Alice K.", role: "Sales Rep" },
@@ -1115,7 +1152,7 @@ export default function App() {
       const saved = localStorage.getItem("ht_room_presets");
       if (saved) return JSON.parse(saved);
     } catch(e) {}
-    return { showroom: "DEFAULT", display: "DEFAULT", livesheet: "DEFAULT", deals: "DEFAULT", gallery: "DEFAULT", manager: "DEFAULT" };
+    return { showroom: "DEFAULT", display: "DEFAULT", livesheet: "DEFAULT", deals: "DEFAULT", gallery: "DEFAULT", manager: "DEFAULT", master: "DEFAULT" };
   });
   const currentPreset = roomPresets[currentRoom] || "DEFAULT";
   const setCurrentPreset = async (preset: PresetType) => {
@@ -1524,34 +1561,49 @@ export default function App() {
           }
         } catch (e) {}
 
-        // Step 7.5: Fetch Hublet Ads
+                // Step 7.5: Fetch HubAllies & HubTenants
         try {
-          const ads = await db.fetchHubletAds();
-          if (ads && ads.length > 0) {
-            setHubletAds(ads.map((ad: any) => ({
-              id: ad.id,
-              name: ad.name,
-              url: ad.url,
-              active: ad.active,
-              clickCount: ad.clickCount || 0
-            })));
-          } else {
-            // Seed defaults if empty
-            try {
-              const defaults = [
-                { id: "ad-1", name: "Jotra", url: "https://jotra.com", active: true, clickCount: 0 },
-                { id: "ad-2", name: "Ugomenz", url: "https://ugomenz.com", active: true, clickCount: 0 }
-              ];
-              // Write once directly to avoid race conditions and multiple trigger events
-              await supabase.from("client_channels").upsert({ client_id: "hublet_ads", website: JSON.stringify(defaults) }, { onConflict: "client_id" });
-              
-              setHubletAds(defaults);
-            } catch (err) {
-              console.error("Seed hublet_ads error:", err);
+          let allies = await fetchHubAllies();
+          let tenants = await fetchHubTenants();
+          
+          if (allies.length === 0) {
+            const seedAllies: HubAlly[] = [
+              { id: "ally-1", ally_name: "Jotra Interiors", business_type: "Furniture & Design", description: "Premium furniture and interior design services", logo_or_photo: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=500&q=80", contact_info: { phone: "08012345678", whatsapp: "08012345678" }, external_link: "https://jotra-interiors.vercel.app", referral_code: "JOTRA-001", status: "active", date_added: new Date().toISOString(), referral_count: 0 },
+              { id: "ally-2", ally_name: "Ugomenz", business_type: "Fashion & Tailoring", description: "Bespoke fashion design and ready-to-wear outfits", logo_or_photo: "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=500&q=80", contact_info: { phone: "08098765432", whatsapp: "08098765432" }, external_link: "https://ugomenz.vercel.app", referral_code: "UGOMENZ-002", status: "active", date_added: new Date().toISOString(), referral_count: 0 }
+            ];
+            for (const a of seedAllies) await saveHubAlly(a);
+            allies = seedAllies;
+          }
+          
+          if (tenants.length === 0) {
+            const seedTenants: HubTenant[] = [
+              { id: "tenant-1", tenant_name: "Martins", description: "Expert in solar installation and maintenance. Available for home setups.", category: "Solar", photos: ["https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=500&q=80", "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80"], contact_info: { phone: "08011223344", whatsapp: "08011223344" }, invoicing_enabled: true, referral_code: "MARTINS", pixel_id: "", status: "active", date_added: new Date().toISOString(), referral_entries: 0, discovery_entries: 0 }
+            ];
+            for (const t of seedTenants) await saveHubTenant(t);
+            tenants = seedTenants;
+          }
+          
+          setHubAllies(allies);
+          setHubTenants(tenants);
+          
+          // Handle initial URL parameters for referral tracking
+          const urlParams = new URLSearchParams(window.location.search);
+          const refCode = urlParams.get('ref');
+          if (refCode) {
+            const matchedAlly = allies.find(a => a.referral_code.toUpperCase() === refCode.toUpperCase());
+            const matchedTenant = tenants.find(t => t.referral_code.toUpperCase() === refCode.toUpperCase());
+            
+            if (matchedAlly && !sessionStorage.getItem('logged_ally_ref_' + matchedAlly.id)) {
+              await logAllyReferral(matchedAlly.id, matchedAlly.referral_code);
+              sessionStorage.setItem('logged_ally_ref_' + matchedAlly.id, 'true');
+            } else if (matchedTenant && !sessionStorage.getItem('logged_tenant_ref_' + matchedTenant.id)) {
+              await logTenantTraffic(matchedTenant.id, matchedTenant.referral_code, 'referral');
+              sessionStorage.setItem('logged_tenant_ref_' + matchedTenant.id, 'true');
+              setActiveTenantSpace(matchedTenant);
             }
           }
         } catch (e) {
-          console.error("Failed to load hublet_ads", e);
+          console.error("Failed to load allies & tenants", e);
         }
 
         // Step 8: Fetch Storefront Banner & Presets
@@ -2977,23 +3029,45 @@ Issue: ${escDesc}`;
               ))}
             </div>
 
-            {/* Partner Spotlight / Hublets */}
-            <div className="flex gap-3 mt-3 overflow-x-auto pb-2 scrollbar-hide">
-              {hubletAds.filter(ad => ad.active).map(ad => (
+            {/* HubAlly & HubTenant Buttons */}
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="text-[10px] text-center text-slate-400 italic font-serif leading-relaxed px-4 mb-1">
+                Discover our trusted partners and rented spaces — tap to explore
+              </p>
+              <div className="grid grid-cols-2 gap-3">
                 <button 
-                  key={ad.id}
-                  onClick={() => {
-                    db.incrementHubletAdClick(ad.id).catch(e => console.error(e));
-                    window.open(ad.url, '_blank');
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-700 hover:border-blue-500 transition-colors shadow-sm whitespace-nowrap group"
+                  onClick={() => setShowAllyDirectory(true)}
+                  className="relative overflow-hidden rounded-xl h-14 border border-blue-500/30 shadow-lg group"
                 >
-                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shadow-inner group-hover:scale-110 transition-transform">
-                    {ad.name.charAt(0)}
+                  <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32b7?auto=format&fit=crop&w=400&q=80" alt="HubAlly" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-blue-900/50 group-hover:bg-blue-900/40 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center border border-white/20 shadow-md">
+                        <Handshake className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <h3 className="text-xs font-black text-white uppercase tracking-widest drop-shadow-md">
+                        HubAlly
+                      </h3>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold text-white uppercase tracking-wider">{ad.name}</span>
                 </button>
-              ))}
+                <button 
+                  onClick={() => setShowTenantDirectory(true)}
+                  className="relative overflow-hidden rounded-xl h-14 border border-emerald-500/30 shadow-lg group"
+                >
+                  <img src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=80" alt="HubTenant" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-emerald-900/50 group-hover:bg-emerald-900/40 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center border border-white/20 shadow-md">
+                        <Store className="w-3.5 h-3.5 text-white" />
+                      </div>
+                      <h3 className="text-xs font-black text-white uppercase tracking-widest drop-shadow-md">
+                        HubTenant
+                      </h3>
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -3038,6 +3112,38 @@ Issue: ${escDesc}`;
             >
               Enter Showroom →
             </motion.button>
+
+            {/* Enter Tenant ID Flow */}
+            <div className="mt-4 p-4 border border-slate-700 bg-slate-900 rounded-lg shadow-inner">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Store className="w-4 h-4"/> Have a Tenant Code?</h4>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={tenantEntryCode}
+                  onChange={(e) => setTenantEntryCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. MARTINS"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-600"
+                />
+                <button 
+                  onClick={async () => {
+                    const matched = hubTenants.find(t => t.referral_code.toUpperCase() === tenantEntryCode.toUpperCase() && t.status === 'active');
+                    if (matched) {
+                      if (!sessionStorage.getItem('logged_tenant_ref_' + matched.id)) {
+                        await logTenantTraffic(matched.id, matched.referral_code, 'referral');
+                        sessionStorage.setItem('logged_tenant_ref_' + matched.id, 'true');
+                      }
+                      setActiveTenantSpace(matched);
+                      setTenantEntryCode("");
+                    } else {
+                      alert("Invalid or inactive Tenant Code.");
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded text-[10px] uppercase tracking-wider transition-colors"
+                >
+                  Enter
+                </button>
+              </div>
+            </div>
 
             <p className="text-[9px] text-slate-500 font-mono tracking-wider uppercase text-center mt-2">
               {STORE.addr} · {STORE.phone}
@@ -4711,10 +4817,17 @@ Issue: ${escDesc}`;
               </div>
             )}
 
+            {/* Master Room */}
+            {currentRoom === "master" && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <MasterSection />
+              </motion.div>
+            )}
+
             {/* Manager Room */}
             {currentRoom === "manager" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
-                <Teleprompter text="Welcome to the Master Control Hub. Authorized Managers only. Configure home screen partner badges, review staff logs, or manage sheets." />
+                <Teleprompter text="Welcome to the Manager Control Hub. Authorized Managers only. Configure home screen partner badges, review staff logs, or manage sheets." />
                 <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
                   <h3 className="text-emerald-500 font-bold text-base flex items-center gap-2">
                     <Settings className="w-5 h-5" /> Manager Control Hub
@@ -4724,7 +4837,7 @@ Issue: ${escDesc}`;
 
                 {!managerIsLoggedIn ? (
                   <form onSubmit={handleManagerLogin} className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Master PIN</p>
+                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Manager PIN</p>
                     <input
                       type="password"
                       placeholder="Enter Manager PIN"
@@ -4734,7 +4847,7 @@ Issue: ${escDesc}`;
                     />
                     {managerError && <p className="text-xs text-red-500 font-mono text-center">{managerError}</p>}
                     <button type="submit" className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-bold text-white uppercase tracking-wider">
-                      Unlock Master Hub →
+                      Unlock Manager Hub →
                     </button>
                     <p className="text-[10px] text-slate-500 text-center mt-1">Hint: Try 'admin' or '0000'</p>
                   </form>
@@ -4747,27 +4860,28 @@ Issue: ${escDesc}`;
 
                     {activeManagerTab === "menu" && (
                       <div className="grid grid-cols-2 gap-3">
-                        <button onClick={() => setActiveManagerTab("ads")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
-                          <Globe className="w-6 h-6 text-blue-400" />
+                        <button onClick={() => setActiveManagerTab("ally")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Handshake className="w-6 h-6 text-blue-400" />
                           <div>
-                            <h4 className="font-bold text-[11px] text-white uppercase">Partner Ads</h4>
-                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Toggle home screen badges</p>
+                            <h4 className="font-bold text-[11px] text-white uppercase">HubAlly</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Manage Allies & Tracking</p>
                           </div>
                         </button>
-                        <button onClick={() => setActiveManagerTab("staff")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
-                          <Lock className="w-6 h-6 text-purple-400" />
+                        <button onClick={() => setActiveManagerTab("tenant")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Store className="w-6 h-6 text-emerald-400" />
                           <div>
-                            <h4 className="font-bold text-[11px] text-white uppercase">Staff Logs</h4>
+                            <h4 className="font-bold text-[11px] text-white uppercase">HubTenant</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Manage Tenant Spaces</p>
+                          </div>
+                        </button>
+                        <button onClick={() => setActiveManagerTab("manage-staff")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
+                          <Users className="w-6 h-6 text-emerald-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Manage Staff</h4>
                             <p className="text-[9px] text-[var(--mu)] mt-0.5">View performance reviews</p>
                           </div>
                         </button>
-                        <button onClick={() => setActiveManagerTab("directory")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
-                          <Users className="w-6 h-6 text-amber-400" />
-                          <div>
-                            <h4 className="font-bold text-[11px] text-white uppercase">Directory</h4>
-                            <p className="text-[9px] text-[var(--mu)] mt-0.5">View staff roster</p>
-                          </div>
-                        </button>
+                        {/* Directory moved to Manage Staff */}
                         <button onClick={() => setCurrentRoom("sheets")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
                           <Database className="w-6 h-6 text-emerald-400" />
                           <div>
@@ -4778,140 +4892,204 @@ Issue: ${escDesc}`;
                       </div>
                     )}
 
-                    {activeManagerTab === "ads" && (
+                    {activeManagerTab === "ally" && (
                       <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
                         <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
-                          <h4 className="font-bold text-[13px] text-white uppercase">Partner Ads Configuration</h4>
+                          <h4 className="font-bold text-[13px] text-white uppercase">HubAlly Configuration</h4>
                           <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
                         </div>
-                        <h5 className="text-[10px] uppercase font-bold text-slate-400 mt-2">Display Floor Tags</h5>
-                        {Object.keys(partnerAds).map(brand => (
-                          <div key={brand} className="flex justify-between items-center p-3 bg-slate-950 border border-slate-800 rounded">
-                            <span className="text-xs font-bold uppercase text-white">{brand}</span>
-                            <button
-                              onClick={() => setPartnerAds(prev => ({...prev, [brand]: !prev[brand]}))}
-                              className={`w-10 h-5 rounded-full relative transition-colors ${partnerAds[brand] ? "bg-emerald-500" : "bg-slate-700"}`}
-                            >
-                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${partnerAds[brand] ? "left-[22px]" : "left-0.5"}`} />
-                            </button>
-                          </div>
-                        ))}
-                        <h5 className="text-[10px] uppercase font-bold text-slate-400 mt-4">Hublet Partner Spotlights</h5>
-                        {hubletAds.map(ad => (
-                          <div key={ad.id} className="flex justify-between items-center p-3 bg-slate-950 border border-slate-800 rounded">
-                            <span className="text-xs font-bold uppercase text-white">{ad.name} Hublet</span>
-                            <button
-                              onClick={async () => {
-                                const newActive = !ad.active;
-                                setHubletAds(prev => prev.map(p => p.id === ad.id ? {...p, active: newActive} : p));
-                                try {
-                                  await db.toggleHubletAd(ad.id, newActive);
-                                } catch (e) {
-                                  console.error("Failed to toggle hublet ad", e);
-                                }
-                              }}
-                              className={`w-10 h-5 rounded-full relative transition-colors ${ad.active ? "bg-emerald-500" : "bg-slate-700"}`}
-                            >
-                              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${ad.active ? "left-[22px]" : "left-0.5"}`} />
-                            </button>
-                          </div>
-                        ))}
                         
-                        <div className="mt-4 mb-2 overflow-x-hidden">
-                          <h5 className="text-[10px] uppercase font-bold text-slate-400 mb-3">Partner Engagement (Clicks)</h5>
-                          <div className="w-full h-[200px] bg-slate-950 p-4 border border-slate-800 rounded min-w-0 min-h-0 overflow-hidden">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={hubletAds} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                                <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                                <Tooltip 
-                                  cursor={{ fill: '#1e293b' }} 
-                                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '4px', fontSize: '12px', color: '#f8fafc' }}
-                                />
-                                <Bar dataKey="clickCount" radius={[4, 4, 0, 0]}>
-                                  {hubletAds.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.active ? '#3b82f6' : '#64748b'} />
-                                  ))}
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                        
-                        <div className="mt-2 p-3 bg-slate-900 border border-slate-800 rounded flex flex-col gap-2">
-                          <h6 className="text-[10px] uppercase font-bold text-[var(--mu)]">Add New Partner</h6>
-                          <input type="text" placeholder="Partner Name (e.g. Acme)" value={newHubletName} onChange={e => setNewHubletName(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-2 outline-none font-mono" />
-                          <input type="url" placeholder="URL (e.g. https://acme.com)" value={newHubletUrl} onChange={e => setNewHubletUrl(e.target.value)} className="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded p-2 outline-none font-mono" />
-                          <button 
-                            disabled={addingHublet || !newHubletName || !newHubletUrl}
-                            onClick={async () => {
-                              try {
-                                setAddingHublet(true);
-                                await db.addHubletAd({ name: newHubletName, url: newHubletUrl, active: true, clickCount: 0 });
-                                const refreshedAds = await db.fetchHubletAds();
-                                setHubletAds(refreshedAds.map((a: any) => ({
-                                  id: a.id,
-                                  name: a.name,
-                                  url: a.url,
-                                  active: a.active,
-                                  clickCount: a.clickCount || 0
-                                })));
-                                setNewHubletName("");
-                                setNewHubletUrl("");
-                              } catch (e) {
-                                console.error("Error adding hublet", e);
-                              } finally {
-                                setAddingHublet(false);
-                              }
-                            }}
-                            className="w-full py-2 mt-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 rounded text-xs font-bold text-white uppercase transition-colors">
-                            {addingHublet ? "Adding..." : "Add Partner"}
+                        <div className="flex justify-between items-center">
+                          <h5 className="text-[10px] uppercase font-bold text-slate-400">Allies Directory</h5>
+                          <button onClick={() => setAddingAlly(true)} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] font-bold text-white uppercase tracking-wider">
+                            + Add Ally
                           </button>
                         </div>
+
+                        {addingAlly && (
+                          <div className="bg-slate-900 border border-blue-900/50 p-4 rounded-xl flex flex-col gap-3">
+                            <h6 className="text-[10px] uppercase text-blue-400 font-bold mb-2 border-b border-blue-900/30 pb-1">New Ally Profile</h6>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input id="ally-name" placeholder="Ally Name (e.g. Jotra)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ally-type" placeholder="Business Type" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ally-desc" placeholder="Description" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ally-logo" placeholder="Logo/Photo URL" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ally-whatsapp" placeholder="WhatsApp (e.g. 080...)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ally-link" placeholder="External Link (Optional)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                            </div>
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={async () => {
+                                const name = (document.getElementById('ally-name') as HTMLInputElement).value;
+                                if (!name) return;
+                                const id = "ally-" + Date.now();
+                                const newAlly: HubAlly = {
+                                  id, ally_name: name,
+                                  business_type: (document.getElementById('ally-type') as HTMLInputElement).value || "Partner",
+                                  description: (document.getElementById('ally-desc') as HTMLInputElement).value || "Hublet Ally",
+                                  logo_or_photo: (document.getElementById('ally-logo') as HTMLInputElement).value || "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80",
+                                  contact_info: { whatsapp: (document.getElementById('ally-whatsapp') as HTMLInputElement).value },
+                                  external_link: (document.getElementById('ally-link') as HTMLInputElement).value,
+                                  referral_code: name.replace(/\s+/g, '').toUpperCase() + "-" + Math.floor(Math.random()*100),
+                                  status: "active", date_added: new Date().toISOString(), referral_count: 0
+                                };
+                                await saveHubAlly(newAlly);
+                                setHubAllies(await fetchHubAllies());
+                                setAddingAlly(false);
+                              }} className="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Save Ally</button>
+                              <button onClick={() => setAddingAlly(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Cancel</button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="w-full h-[150px] bg-slate-950 p-2 border border-slate-800 rounded mb-4 overflow-hidden">
+                          <h6 className="text-[9px] uppercase text-slate-500 font-bold mb-1">Referral Performance</h6>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={hubAllies} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                              <XAxis dataKey="ally_name" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: '#1e293b' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '4px', fontSize: '10px', color: '#f8fafc' }}/>
+                              <Bar dataKey="referral_count" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+                          {hubAllies.map(ally => (
+                            <div key={ally.id} className="bg-slate-950 border border-slate-800 p-3 rounded-lg flex flex-col gap-2 relative">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h6 className="font-bold text-xs text-white uppercase flex items-center gap-2">
+                                    {ally.ally_name}
+                                    <span className={`w-2 h-2 rounded-full ${ally.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                  </h6>
+                                  <p className="text-[10px] font-mono text-blue-400">Code: {ally.referral_code}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={async () => {
+                                    const nextStatus = ally.status === 'active' ? 'inactive' : 'active';
+                                    await saveHubAlly({...ally, status: nextStatus});
+                                    setHubAllies(await fetchHubAllies());
+                                  }} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">
+                                    <Globe className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={async () => {
+                                    if(confirm("Delete this Ally?")) {
+                                      await deleteHubAlly(ally.id);
+                                      setHubAllies(await fetchHubAllies());
+                                    }
+                                  }} className="p-1.5 bg-red-900/40 hover:bg-red-900/80 rounded text-red-400">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="text-[10px] text-slate-400 uppercase tracking-widest border-t border-slate-800 pt-2 flex justify-between">
+                                <span>Total Referrals</span>
+                                <span className="font-mono text-white bg-slate-800 px-2 rounded">{ally.referral_count || 0}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
 
-                    {activeManagerTab === "staff" && (
+                    {activeManagerTab === "tenant" && (
                       <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
                         <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
-                          <h4 className="font-bold text-[13px] text-white uppercase">Staff Performance Logs</h4>
+                          <h4 className="font-bold text-[13px] text-white uppercase">HubTenant Configuration</h4>
                           <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
                         </div>
-                        <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto">
-                          {performanceLogs.length === 0 && (
-                            <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-center text-[10px] text-[var(--mu)] font-mono italic">
-                              No weekly logs submitted yet.
+                        
+                        <div className="flex justify-between items-center">
+                          <h5 className="text-[10px] uppercase font-bold text-slate-400">Tenants Directory</h5>
+                          <button onClick={() => setAddingTenant(true)} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] font-bold text-white uppercase tracking-wider">
+                            + Add Tenant
+                          </button>
+                        </div>
+
+                        {addingTenant && (
+                          <div className="bg-slate-900 border border-emerald-900/50 p-4 rounded-xl flex flex-col gap-3">
+                            <h6 className="text-[10px] uppercase text-emerald-400 font-bold mb-2 border-b border-emerald-900/30 pb-1">New Tenant Space</h6>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input id="ten-name" placeholder="Tenant Name (e.g. Martins)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-cat" placeholder="Category (e.g. Solar)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-desc" placeholder="Bio/Description" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-photo" placeholder="Primary Photo URL" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-whatsapp" placeholder="WhatsApp Number" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-pixel" placeholder="Meta Pixel ID (Optional)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
                             </div>
-                          )}
-                          {performanceLogs.map(log => (
-                            <div key={log.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex flex-col gap-2">
-                              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                <h5 className="text-[11px] font-bold text-white uppercase">{log.staffName} <span className="text-slate-500 font-mono font-normal">[{log.date}]</span></h5>
-                                <button 
-                                  onClick={() => setPerformanceLogs(prev => prev.map(p => p.id === log.id ? {...p, approved: !p.approved} : p))}
-                                  className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-colors ${log.approved ? "bg-emerald-900/60 text-emerald-400 border border-emerald-800" : "bg-slate-800 text-slate-400 border border-slate-700"}`}
-                                >
-                                  {log.approved ? "✓ Approved" : "Mark Approved"}
-                                </button>
+                            <div className="flex gap-2 mt-2">
+                              <button onClick={async () => {
+                                const name = (document.getElementById('ten-name') as HTMLInputElement).value;
+                                if (!name) return;
+                                const id = "tenant-" + Date.now();
+                                const newTenant: HubTenant = {
+                                  id, tenant_name: name,
+                                  category: (document.getElementById('ten-cat') as HTMLInputElement).value || "Partner",
+                                  description: (document.getElementById('ten-desc') as HTMLInputElement).value || "Hublet Tenant",
+                                  photos: [(document.getElementById('ten-photo') as HTMLInputElement).value || "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80"],
+                                  contact_info: { whatsapp: (document.getElementById('ten-whatsapp') as HTMLInputElement).value },
+                                  invoicing_enabled: true,
+                                  pixel_id: (document.getElementById('ten-pixel') as HTMLInputElement).value,
+                                  referral_code: name.replace(/\s+/g, '').toUpperCase() + "-" + Math.floor(Math.random()*100),
+                                  status: "active", date_added: new Date().toISOString(), referral_entries: 0, discovery_entries: 0
+                                };
+                                await saveHubTenant(newTenant);
+                                setHubTenants(await fetchHubTenants());
+                                setAddingTenant(false);
+                              }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Save Tenant</button>
+                              <button onClick={() => setAddingTenant(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Cancel</button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="w-full h-[150px] bg-slate-950 p-2 border border-slate-800 rounded mb-4 overflow-hidden">
+                          <h6 className="text-[9px] uppercase text-slate-500 font-bold mb-1">Traffic Insights (Entries)</h6>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={hubTenants} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                              <XAxis dataKey="tenant_name" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{ fill: '#1e293b' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '4px', fontSize: '10px', color: '#f8fafc' }}/>
+                              <Bar dataKey="referral_entries" fill="#10b981" stackId="a" />
+                              <Bar dataKey="discovery_entries" fill="#3b82f6" stackId="a" radius={[2, 2, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-1">
+                          {hubTenants.map(tenant => (
+                            <div key={tenant.id} className="bg-slate-950 border border-slate-800 p-3 rounded-lg flex flex-col gap-2 relative">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <h6 className="font-bold text-xs text-white uppercase flex items-center gap-2">
+                                    {tenant.tenant_name}
+                                    <span className={`w-2 h-2 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                  </h6>
+                                  <p className="text-[10px] font-mono text-emerald-400">Code: {tenant.referral_code}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button onClick={async () => {
+                                    const nextStatus = tenant.status === 'active' ? 'inactive' : 'active';
+                                    await saveHubTenant({...tenant, status: nextStatus});
+                                    setHubTenants(await fetchHubTenants());
+                                  }} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">
+                                    <Globe className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={async () => {
+                                    if(confirm("Delete this Tenant?")) {
+                                      await deleteHubTenant(tenant.id);
+                                      setHubTenants(await fetchHubTenants());
+                                    }
+                                  }} className="p-1.5 bg-red-900/40 hover:bg-red-900/80 rounded text-red-400">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="grid grid-cols-1 gap-2 text-[10px]">
-                                <div className="flex flex-col">
-                                  <span className="text-blue-400 font-bold">1. Base Task</span>
-                                  <span className="text-slate-300">{log.baseTaskCount} catalog updates completed</span>
+                              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 uppercase tracking-widest border-t border-slate-800 pt-2 mt-1">
+                                <div className="flex flex-col gap-1">
+                                  <span>Referral (📤)</span>
+                                  <span className="font-mono text-emerald-400 font-bold bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-900/50 w-fit">{tenant.referral_entries || 0}</span>
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className="text-emerald-400 font-bold">2. Educational Engine</span>
-                                  <span className="text-slate-300 truncate max-w-full"><a href={log.eduLink} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">{log.eduLink || "No link"}</a></span>
-                                  <span className="text-slate-400">Views/Engagements: {log.eduViews || "N/A"}</span>
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-purple-400 font-bold">3. Entertainment Engine</span>
-                                  <span className="text-slate-300 truncate max-w-full"><a href={log.entLink} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">{log.entLink || "No link"}</a></span>
-                                  <span className="text-slate-400">Views/Engagements: {log.entViews || "N/A"}</span>
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="text-amber-400 font-bold">4. Customer Conversion Engine</span>
-                                  <span className="text-slate-300 bg-slate-900 p-1.5 rounded break-words">{log.conversionNote || "N/A"}</span>
+                                <div className="flex flex-col gap-1">
+                                  <span>Discovery (📥)</span>
+                                  <span className="font-mono text-blue-400 font-bold bg-blue-950/30 px-2 py-0.5 rounded border border-blue-900/50 w-fit">{tenant.discovery_entries || 0}</span>
                                 </div>
                               </div>
                             </div>
@@ -4920,25 +5098,7 @@ Issue: ${escDesc}`;
                       </div>
                     )}
 
-                    {activeManagerTab === "directory" && (
-                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                        <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
-                          <h4 className="font-bold text-[13px] text-white uppercase">Staff Directory</h4>
-                          <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
-                        </div>
-                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                          {staffDirectory.map(staff => (
-                            <div key={staff.id} className="p-3 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center">
-                              <div className="flex flex-col">
-                                <span className="text-xs font-bold text-white uppercase">{staff.name}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">{staff.id}</span>
-                              </div>
-                              <span className="text-[10px] bg-slate-800 text-[var(--mu)] px-2 py-1 rounded border border-slate-700 uppercase tracking-wider">{staff.role}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {activeManagerTab === "manage-staff" && (<ManagerManageStaff onBack={() => setActiveManagerTab("menu")} />)}
                   </div>
                 )}
               </motion.div>
@@ -6103,6 +6263,76 @@ Issue: ${escDesc}`;
 
           </main>
 
+          {/* Floating Action Stack */}
+          {inStore && (
+            <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-50 pointer-events-none">
+              <motion.button 
+                drag
+                dragMomentum={false}
+                onClick={handleBack}
+                className="w-12 h-12 bg-orange-600 hover:bg-orange-500 rounded-full flex flex-col items-center justify-center text-white shadow-[0_4px_15px_rgba(234,88,12,0.4)] border-2 border-white/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                title="Go Back"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-[7.5px] font-black mt-[1px] tracking-wide">BACK</span>
+              </motion.button>
+              <motion.button 
+                drag
+                dragMomentum={false}
+                onClick={() => setCurrentRoom("info")}
+                className="w-12 h-12 bg-red-600 hover:bg-red-500 rounded-full flex flex-col items-center justify-center text-white shadow-[0_4px_15px_rgba(220,38,38,0.4)] border-2 border-white/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                title="AI Support"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Bot className="w-4 h-4" />
+                <span className="text-[8px] font-black mt-[1px]">AI</span>
+              </motion.button>
+              <motion.button 
+                drag
+                dragMomentum={false}
+                onClick={() => setCurrentRoom("channels")}
+                className="w-12 h-12 bg-purple-600 hover:bg-purple-500 rounded-full flex flex-col items-center justify-center text-white shadow-[0_4px_15px_rgba(147,51,234,0.4)] border-2 border-white/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                title="Channels"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Network className="w-4 h-4" />
+                <span className="text-[6.5px] font-black mt-[1px] tracking-wide uppercase">CHANNELS</span>
+              </motion.button>
+              {hubAllies.filter(a => a.status === 'active').length > 0 && (
+                <motion.button 
+                  drag
+                  dragMomentum={false}
+                  onClick={() => setShowAllyDirectory(true)}
+                  className="w-12 h-12 bg-blue-600 hover:bg-blue-500 rounded-full flex flex-col items-center justify-center text-white shadow-[0_4px_15px_rgba(37,99,235,0.4)] border-2 border-white/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                  title="Partners"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Handshake className="w-4 h-4" />
+                  <span className="text-[7.5px] font-black mt-[1px] tracking-wide">ALLY</span>
+                </motion.button>
+              )}
+              {hubTenants.filter(t => t.status === 'active').length > 0 && (
+                <motion.button 
+                  drag
+                  dragMomentum={false}
+                  onClick={() => setShowTenantDirectory(true)}
+                  className="w-12 h-12 bg-emerald-600 hover:bg-emerald-500 rounded-full flex flex-col items-center justify-center text-white shadow-[0_4px_15px_rgba(16,185,129,0.4)] border-2 border-white/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                  title="Mini-Stores"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Store className="w-4 h-4" />
+                  <span className="text-[7px] font-black mt-[1px] tracking-wide">TENANT</span>
+                </motion.button>
+              )}
+            </div>
+          )}
+
           {/* 3.5 Bottom Navigation - Fixed bottom bar */}
           <nav className="navbar bg-[var(--dk)]/95 backdrop-blur-md border-t-4 border-[#1a2a4a] overflow-x-auto">
             <div className="flex justify-between items-center px-2 py-1 max-w-[430px] mx-auto min-w-[430px]">
@@ -6124,6 +6354,7 @@ Issue: ${escDesc}`;
                 { id: "pickup", label: "Pickup", icon: <Calendar className="w-4 h-4" /> },
                 { id: "staff", label: "Staff", icon: <Lock className="w-4 h-4" /> },
                 { id: "manager", label: "Manager", icon: <Settings className="w-4 h-4" /> },
+                { id: "master", label: "Master", icon: <Shield className="w-4 h-4" /> },
                 { id: "school", label: "School", icon: <GraduationCap className="w-4 h-4" /> }
               ].map((tab) => (
                 <button
