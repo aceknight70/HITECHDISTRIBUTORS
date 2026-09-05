@@ -1583,6 +1583,26 @@ export default function App() {
             tenants = seedTenants;
           }
           
+          if (!tenants.find(t => t.id === "tenant-2")) {
+            const sumshi = { 
+              id: "tenant-2", 
+              tenant_name: "Sumshi", 
+              description: "Specialist in Solar Solutions and Point of Sale (POS) systems.", 
+              category: "Solar & POS", 
+              photos: ["https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=500&q=80", "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=500&q=80"], 
+              contact_info: { phone: "08011223355", whatsapp: "08011223355" }, 
+              invoicing_enabled: true, 
+              referral_code: "SUMSHI", 
+              pixel_id: "", 
+              status: "active", 
+              date_added: new Date().toISOString(), 
+              referral_entries: 0, 
+              discovery_entries: 0 
+            };
+            await saveHubTenant(sumshi);
+            tenants.push(sumshi);
+          }
+          
           setHubAllies(allies);
           setHubTenants(tenants);
           
@@ -3132,6 +3152,8 @@ Issue: ${escDesc}`;
                         await logTenantTraffic(matched.id, matched.referral_code, 'referral');
                         sessionStorage.setItem('logged_tenant_ref_' + matched.id, 'true');
                       }
+                      setInStore(true);
+                      setCurrentRoom("showroom");
                       setActiveTenantSpace(matched);
                       setTenantEntryCode("");
                     } else {
@@ -6682,8 +6704,8 @@ Issue: ${escDesc}`;
                 )}
                 
                 <div className="mt-auto pt-4 flex gap-3">
-                  <button onClick={() => { setActiveTenantSpace(null); setCurrentRoom("showroom"); }} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-xs transition-colors shadow-lg shadow-emerald-900/20">
-                    Exit to Main Showroom
+                  <button onClick={() => { setActiveTenantSpace(null); setInStore(true); setCurrentRoom("showroom"); }} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-xs transition-colors shadow-lg shadow-emerald-900/20">
+                    Continue to HiTech Showroom
                   </button>
                 </div>
               </div>
