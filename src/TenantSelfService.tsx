@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import * as db from "./lib/supabase";
 import { HubTenant, HubTenantProduct, HubTenantCommission, uploadToSupabaseStorage, DEFAULT_30_SLOT_MOCKUPS } from "./lib/supabase";
+import TenantPhotoLightbox from "./components/TenantPhotoLightbox";
 
 interface TenantSelfServiceProps {
   initialTenant?: HubTenant | null;
@@ -44,6 +45,7 @@ export default function TenantSelfService({
   const [activeTab, setActiveTab] = useState<"gallery" | "products" | "earnings">("gallery");
 
   // Gallery state (30 slots)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [replacingSlotIndex, setReplacingSlotIndex] = useState<number | null>(null);
   const [slotPhotoUrlInput, setSlotPhotoUrlInput] = useState("");
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -121,15 +123,14 @@ export default function TenantSelfService({
 
     try {
       const allTenants = await db.fetchHubTenants();
-      const match = allTenants.find(
-        t => t.referral_code?.toUpperCase() === code
-      );
+      const match = db.findMatchingTenant(allTenants, code);
 
       if (match) {
         setAuthenticatedTenant(match);
         setLoginError("");
       } else {
-        setLoginError(`Referral Code "${code}" was not found. Try SHAMASFINDINGS01, MARTINSQW13, or SUMSHI.`);
+        const availableCodes = allTenants.filter(t => t.status === 'active').map(t => `${t.tenant_name.split(" ")[0]} (${t.referral_code})`).join(", ");
+        setLoginError(`Referral Code "${code}" was not found. Registered merchants: ${availableCodes || "MARTINSQW13, SHAMASFINDINGS01, SUMSHI"}`);
       }
     } catch (err) {
       setLoginError("Error verifying code. Please try again.");
@@ -138,24 +139,57 @@ export default function TenantSelfService({
     }
   };
 
-  // Replace individual photo slot (1-30)
-  const handleSaveSlotPhoto = async (newUrl: string) => {
-    if (replacingSlotIndex === null || !authenticatedTenant) return;
+  // Save photo to a specific slot index immediately
+  const handleSaveSlotPhotoByIndex = async (slotIndex: number, newUrl: string) => {
+    if (!authenticatedTenant || slotIndex < 0 || slotIndex >= 30) return;
 
     const currentPhotos = [...authenticatedTenant.photos];
-    currentPhotos[replacingSlotIndex] = newUrl.trim();
+    currentPhotos[slotIndex] = newUrl.trim();
 
     const updatedTenant: HubTenant = {
       ...authenticatedTenant,
       photos: currentPhotos
     };
 
+    // Update state immediately so UI updates without delay
     setAuthenticatedTenant(updatedTenant);
     await db.saveHubTenant(updatedTenant);
     if (onTenantUpdated) onTenantUpdated(updatedTenant);
 
-    setGallerySaveNotice(`Slot ${replacingSlotIndex + 1} photo updated successfully!`);
+    setGallerySaveNotice(`Slot ${slotIndex + 1} updated with your photo!`);
     setTimeout(() => setGallerySaveNotice(null), 3000);
+  };
+
+  const handleDirectSlotUpload = async (slotIndex: number, file: File) => {
+    if (!authenticatedTenant) return;
+    setIsUploadingPhoto(true);
+
+    // Instant optimistic preview with local object URL
+    const localUrl = URL.createObjectURL(file);
+    const optimisticPhotos = [...authenticatedTenant.photos];
+    optimisticPhotos[slotIndex] = localUrl;
+    const optimisticTenant: HubTenant = {
+      ...authenticatedTenant,
+      photos: optimisticPhotos
+    };
+    setAuthenticatedTenant(optimisticTenant);
+    if (onTenantUpdated) onTenantUpdated(optimisticTenant);
+
+    try {
+      const publicUrl = await uploadToSupabaseStorage(file);
+      await handleSaveSlotPhotoByIndex(slotIndex, publicUrl);
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      alert("Failed to upload image. Please try again.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Replace individual photo slot (1-30) modal flow
+  const handleSaveSlotPhoto = async (newUrl: string) => {
+    if (replacingSlotIndex === null) return;
+    await handleSaveSlotPhotoByIndex(replacingSlotIndex, newUrl);
     setReplacingSlotIndex(null);
     setSlotPhotoUrlInput("");
   };
@@ -182,9 +216,20 @@ export default function TenantSelfService({
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || replacingSlotIndex === null || !authenticatedTenant) return;
 
     setIsUploadingPhoto(true);
+    // Instant optimistic preview
+    const localUrl = URL.createObjectURL(file);
+    const optimisticPhotos = [...authenticatedTenant.photos];
+    optimisticPhotos[replacingSlotIndex] = localUrl;
+    const optimisticTenant: HubTenant = {
+      ...authenticatedTenant,
+      photos: optimisticPhotos
+    };
+    setAuthenticatedTenant(optimisticTenant);
+    if (onTenantUpdated) onTenantUpdated(optimisticTenant);
+
     try {
       const publicUrl = await uploadToSupabaseStorage(file);
       await handleSaveSlotPhoto(publicUrl);
@@ -193,6 +238,7 @@ export default function TenantSelfService({
       console.error(err);
     } finally {
       setIsUploadingPhoto(false);
+      e.target.value = "";
     }
   };
 
@@ -300,6 +346,38 @@ export default function TenantSelfService({
                 className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3.5 py-3 text-sm font-mono text-white tracking-widest uppercase outline-none placeholder:text-slate-600"
                 autoFocus
               />
+
+              {/* Quick Demo Access Buttons */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Quick Select:</span>
+                {[
+                  { name: "Martins", code: "MARTINSQW13" },
+                  { name: "Shama's Findings", code: "SHAMASFINDINGS01" },
+                  { name: "Sumshi", code: "SUMSHI" }
+                ].map(demo => (
+                  <button
+                    key={demo.code}
+                    type="button"
+                    onClick={async () => {
+                      setInputCode(demo.code);
+                      setIsVerifying(true);
+                      setLoginError("");
+                      try {
+                        const all = await db.fetchHubTenants();
+                        const match = db.findMatchingTenant(all, demo.code);
+                        if (match) {
+                          setAuthenticatedTenant(match);
+                        }
+                      } finally {
+                        setIsVerifying(false);
+                      }
+                    }}
+                    className="text-[10px] font-mono font-bold bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 px-2 py-1 rounded transition-colors cursor-pointer"
+                  >
+                    {demo.name} ({demo.code})
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loginError && (
@@ -482,7 +560,7 @@ export default function TenantSelfService({
                 return (
                   <div
                     key={idx}
-                    className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col transition-all ${
+                    className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col transition-all shadow-md ${
                       isSlotBeingReplaced
                         ? "border-emerald-500 ring-2 ring-emerald-500/30 shadow-xl"
                         : "border-slate-800 hover:border-slate-700"
@@ -504,8 +582,12 @@ export default function TenantSelfService({
                       </span>
                     </div>
 
-                    {/* Image Preview */}
-                    <div className="relative aspect-square bg-slate-950 overflow-hidden group">
+                    {/* Image Preview - Tapping opens full-screen lightbox at full size */}
+                    <div
+                      onClick={() => setLightboxIndex(idx)}
+                      className="relative aspect-square bg-slate-950 overflow-hidden group cursor-pointer"
+                      title="Tap to review photo at full size"
+                    >
                       <img
                         src={photoUrl}
                         alt={`Slot ${idx + 1}`}
@@ -514,44 +596,81 @@ export default function TenantSelfService({
                           (e.target as HTMLImageElement).src = DEFAULT_30_SLOT_MOCKUPS[idx] || DEFAULT_30_SLOT_MOCKUPS[0];
                         }}
                       />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 gap-1">
+                        <span className="px-2.5 py-1 bg-slate-900/95 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider border border-white/20 shadow-md">
+                          🔍 Review Full Size
+                        </span>
+                        <span className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[9px] font-bold uppercase tracking-wider shadow">
+                          Tap to Enlarge / Swap
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Actions - Prominent direct 'Replace Photo' button opening phone photo picker */}
+                    <div className="p-2 bg-slate-950/90 border-t border-slate-800 flex flex-col gap-1.5">
+                      <label className="w-full py-2 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-md active:scale-95">
+                        <Upload className="w-4 h-4" />
+                        <span>Replace Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleDirectSlotUpload(idx, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+
+                      <div className="flex gap-1 justify-between">
+                        <button
+                          onClick={() => setLightboxIndex(idx)}
+                          className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[9px] font-bold uppercase tracking-wider transition-colors"
+                        >
+                          Enlarge
+                        </button>
                         <button
                           onClick={() => {
                             setReplacingSlotIndex(idx);
                             setSlotPhotoUrlInput(photoUrl);
                           }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-md"
+                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[9px] font-bold uppercase transition-colors"
+                          title="Paste image URL"
                         >
-                          Change Photo
+                          URL
                         </button>
+                        {!isDefault && (
+                          <button
+                            onClick={() => handleResetSlotToDefault(idx)}
+                            className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded text-[9px] transition-colors"
+                            title="Reset to default mockup"
+                          >
+                            Reset
+                          </button>
+                        )}
                       </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="p-2 bg-slate-900 border-t border-slate-800 flex gap-1.5 justify-between">
-                      <button
-                        onClick={() => {
-                          setReplacingSlotIndex(idx);
-                          setSlotPhotoUrlInput(photoUrl);
-                        }}
-                        className="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold uppercase rounded text-center transition-colors"
-                      >
-                        Replace
-                      </button>
-                      {!isDefault && (
-                        <button
-                          onClick={() => handleResetSlotToDefault(idx)}
-                          className="px-2 py-1 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-red-400 text-[10px] rounded transition-colors"
-                          title="Revert to default mockup image"
-                        >
-                          Reset
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
+
+            {/* Full-Screen Lightbox with Replace Action directly from large view */}
+            <TenantPhotoLightbox
+              photos={authenticatedTenant.photos}
+              initialIndex={lightboxIndex ?? 0}
+              isOpen={lightboxIndex !== null}
+              onClose={() => setLightboxIndex(null)}
+              isEditable={true}
+              tenantName={authenticatedTenant.tenant_name}
+              onReplacePhoto={async (slotIdx, newUrl) => {
+                await handleSaveSlotPhotoByIndex(slotIdx, newUrl);
+              }}
+              onResetToMockup={async (slotIdx) => {
+                await handleResetSlotToDefault(slotIdx);
+              }}
+            />
 
             {/* Replace Photo Modal */}
             {replacingSlotIndex !== null && (

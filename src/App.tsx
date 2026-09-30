@@ -64,12 +64,13 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
-import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, MasterTenantNotification } from "./lib/supabase";
+import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, findMatchingTenant, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, MasterTenantNotification } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
 import MasterSection from "./MasterSection";
 import TenantSelfService from "./TenantSelfService";
+import TenantPhotoLightbox from "./components/TenantPhotoLightbox";
 import { GalleryCard, getCategoryFallbackImage } from "./components/GalleryCard";
 
 // Global constant fallback config
@@ -1627,34 +1628,6 @@ export default function App() {
             allies = seedAllies;
           }
           
-          if (tenants.length === 0) {
-            const seedTenants: HubTenant[] = [
-              { id: "tenant-1", tenant_name: "Martins", description: "Expert in solar installation and maintenance. Available for home setups.", category: "Solar", photos: ["https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=500&q=80", "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=500&q=80"], contact_info: { phone: "08011223344", whatsapp: "08011223344" }, invoicing_enabled: true, referral_code: "MARTINS", pixel_id: "", status: "active", date_added: new Date().toISOString(), referral_entries: 0, discovery_entries: 0 }
-            ];
-            for (const t of seedTenants) await saveHubTenant(t);
-            tenants = seedTenants;
-          }
-          
-          if (!tenants.find(t => t.id === "tenant-2")) {
-            const sumshi = { 
-              id: "tenant-2", 
-              tenant_name: "Sumshi", 
-              description: "Specialist in Solar Solutions and Point of Sale (POS) systems.", 
-              category: "Solar & POS", 
-              photos: ["https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=500&q=80", "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=500&q=80"], 
-              contact_info: { phone: "08011223355", whatsapp: "08011223355" }, 
-              invoicing_enabled: true, 
-              referral_code: "SUMSHI", 
-              pixel_id: "", 
-              status: "active", 
-              date_added: new Date().toISOString(), 
-              referral_entries: 0, 
-              discovery_entries: 0 
-            };
-            await saveHubTenant(sumshi);
-            tenants.push(sumshi);
-          }
-          
           setHubAllies(allies);
           setHubTenants(tenants);
           
@@ -1662,8 +1635,8 @@ export default function App() {
           const urlParams = new URLSearchParams(window.location.search);
           const refCode = urlParams.get('ref');
           if (refCode) {
-            const matchedAlly = allies.find(a => a.referral_code.toUpperCase() === refCode.toUpperCase());
-            const matchedTenant = tenants.find(t => t.referral_code.toUpperCase() === refCode.toUpperCase());
+            const matchedAlly = allies.find(a => a.referral_code?.toUpperCase() === refCode.toUpperCase());
+            const matchedTenant = findMatchingTenant(tenants, refCode);
             
             if (matchedAlly && !sessionStorage.getItem('logged_ally_ref_' + matchedAlly.id)) {
               await logAllyReferral(matchedAlly.id, matchedAlly.referral_code);
@@ -3277,13 +3250,13 @@ Issue: ${escDesc}`;
                     if (e.key === "Enter") {
                       const code = tenantEntryCode.trim();
                       if (!code) return;
-                      const matched = hubTenants.find(t => t.referral_code.toUpperCase() === code.toUpperCase() && t.status === 'active');
+                      const matched = findMatchingTenant(hubTenants, code);
                       if (matched) {
                         setPendingTenantConfirmation({ tenant: matched, source: 'referral' });
                         setTenantEntryCode("");
                         setTenantCodeError("");
                       } else {
-                        setTenantCodeError(`Code "${code}" not found. Try MARTINSQW13, SUMSHI, or SHAMASFINDINGS01`);
+                        setTenantCodeError(`Code "${code}" not found.`);
                       }
                     }
                   }}
@@ -3292,13 +3265,13 @@ Issue: ${escDesc}`;
                   onClick={() => {
                     const code = tenantEntryCode.trim();
                     if (!code) return;
-                    const matched = hubTenants.find(t => t.referral_code.toUpperCase() === code.toUpperCase() && t.status === 'active');
+                    const matched = findMatchingTenant(hubTenants, code);
                     if (matched) {
                       setPendingTenantConfirmation({ tenant: matched, source: 'referral' });
                       setTenantEntryCode("");
                       setTenantCodeError("");
                     } else {
-                      setTenantCodeError(`Code "${code}" not found. Try MARTINSQW13, SUMSHI, or SHAMASFINDINGS01`);
+                      setTenantCodeError(`Code "${code}" not found.`);
                     }
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md flex-shrink-0"
@@ -3306,10 +3279,50 @@ Issue: ${escDesc}`;
                   Verify & Enter
                 </button>
               </div>
+
+              {/* Quick Select Buttons for Available Registered Tenants */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Quick Select:</span>
+                {hubTenants.filter(t => t.status === 'active').map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setPendingTenantConfirmation({ tenant: t, source: 'referral' });
+                      setTenantEntryCode("");
+                      setTenantCodeError("");
+                    }}
+                    className="text-[10px] font-mono font-bold bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 hover:border-emerald-500 text-emerald-300 px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                    title={`Click to enter ${t.tenant_name}'s storefront`}
+                  >
+                    <span>{t.tenant_name.split(" ")[0]}</span>
+                    <span className="text-slate-400 font-normal">({t.referral_code})</span>
+                  </button>
+                ))}
+              </div>
+
               {tenantCodeError && (
-                <div className="mt-2.5 p-2.5 bg-red-950/80 border border-red-800 text-red-300 rounded text-[11px] font-mono flex items-center gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                  <span>{tenantCodeError}</span>
+                <div className="mt-2.5 p-2.5 bg-red-950/80 border border-red-800 text-red-300 rounded text-[11px] font-mono flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                    <span>{tenantCodeError} Click an active merchant below:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pl-5">
+                    {hubTenants.filter(t => t.status === 'active').map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setPendingTenantConfirmation({ tenant: t, source: 'referral' });
+                          setTenantEntryCode("");
+                          setTenantCodeError("");
+                        }}
+                        className="underline text-emerald-400 hover:text-emerald-300 cursor-pointer font-bold"
+                      >
+                        {t.tenant_name.split(" ")[0]} ({t.referral_code})
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between items-center text-[10px]">
@@ -7698,9 +7711,22 @@ Issue: ${escDesc}`;
                 <Store className="w-5 h-5 text-emerald-400" />
                 <h3 className="font-black text-white uppercase tracking-widest text-sm">HubTenant Directory</h3>
               </div>
-              <button onClick={() => setShowTenantDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800 cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={async () => {
+                    const refreshed = await db.fetchHubTenants();
+                    setHubTenants(refreshed);
+                  }}
+                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono uppercase bg-emerald-950/80 hover:bg-emerald-900 px-2.5 py-1 rounded border border-emerald-800/60 cursor-pointer flex items-center gap-1 transition-colors"
+                  title="Reload active tenant directory"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Refresh</span>
+                </button>
+                <button onClick={() => setShowTenantDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             
             <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
@@ -7739,17 +7765,57 @@ Issue: ${escDesc}`;
               ) : (
                 <div className="flex flex-col items-center justify-center py-12 text-center border border-slate-800 border-dashed rounded-xl bg-slate-900/50">
                   <Store className="w-8 h-8 text-slate-700 mb-2" />
-                  <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">No Tenants Found</p>
-                  <p className="text-xs text-slate-600 mt-1">Check back later for new spaces.</p>
+                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No Tenants Loaded</p>
+                  <p className="text-xs text-slate-500 mt-1 mb-3">Load the official HiTech Hublet tenants.</p>
+                  <button
+                    onClick={async () => {
+                      const loaded = await db.fetchHubTenants();
+                      setHubTenants(loaded);
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-sm transition-colors cursor-pointer"
+                  >
+                    Restore Official Tenants
+                  </button>
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
-    
 
+      {/* Customer Full-Screen Lightbox for Tenant Space (all 30 slots) */}
+      {activeTenantSpace && lightboxPhotoIndex !== null && (
+        <TenantPhotoLightbox
+          photos={activeTenantSpace.photos || []}
+          initialIndex={lightboxPhotoIndex}
+          isOpen={lightboxPhotoIndex !== null}
+          onClose={() => setLightboxPhotoIndex(null)}
+          isEditable={false}
+          tenantName={activeTenantSpace.tenant_name}
+        />
+      )}
 
+      {/* Tenant Self-Service (My Gallery, My Products, My Earnings) */}
+      {showTenantSelfService && (
+        <TenantSelfService
+          initialTenant={tenantSelfServiceInitialTenant}
+          onClose={() => {
+            setShowTenantSelfService(false);
+            setTenantSelfServiceInitialTenant(null);
+          }}
+          onTenantUpdated={(updated) => {
+            setHubTenants(prev => prev.map(t => t.id === updated.id ? updated : t));
+            if (activeTenantSpace && activeTenantSpace.id === updated.id) {
+              setActiveTenantSpace(updated);
+            }
+          }}
+          onOpenStorefront={(tenant) => {
+            setShowTenantSelfService(false);
+            setTenantSelfServiceInitialTenant(null);
+            setPendingTenantConfirmation({ tenant, source: 'referral' });
+          }}
+        />
+      )}
     </div>
     </>
   );

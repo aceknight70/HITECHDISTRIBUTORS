@@ -791,94 +791,111 @@ export default function MasterSection() {
               )}
 
               <div className="flex flex-col gap-2.5 max-h-[350px] overflow-y-auto pr-1">
-                {hubTenants.map(tenant => (
-                  <div key={tenant.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white text-xs uppercase">{tenant.tenant_name}</span>
-                        <span className={`w-2 h-2 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 uppercase font-mono">
-                          {tenant.category}
-                        </span>
-                        {tenant.pixel_id && (
-                          <span className="text-[8px] bg-blue-950 text-blue-400 px-1 py-0.5 rounded border border-blue-900 font-mono">
-                            Pixel: {tenant.pixel_id}
+                {hubTenants.length > 0 ? (
+                  hubTenants.map(tenant => (
+                    <div key={tenant.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-xs uppercase">{tenant.tenant_name}</span>
+                          <span className={`w-2 h-2 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-800 uppercase font-mono">
+                            {tenant.category}
                           </span>
-                        )}
+                          {tenant.pixel_id && (
+                            <span className="text-[8px] bg-blue-950 text-blue-400 px-1 py-0.5 rounded border border-blue-900 font-mono">
+                              Pixel: {tenant.pixel_id}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] font-mono text-emerald-400 mt-0.5">
+                          Code: <strong className="text-white">{tenant.referral_code}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
+                        </p>
                       </div>
-                      <p className="text-[10px] font-mono text-emerald-400 mt-0.5">
-                        Code: <strong className="text-white">{tenant.referral_code}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded px-2 py-1">
-                        <span className="text-[9px] text-slate-400 uppercase font-bold">Rate:</span>
-                        <input
-                          type="number"
-                          step="0.1"
-                          defaultValue={tenant.commission_rate ?? 1.0}
-                          onBlur={async (e) => {
-                            const newRate = parseFloat(e.target.value) || 1.0;
-                            await db.saveHubTenant({ ...tenant, commission_rate: newRate });
-                            setHubTenants(await db.fetchHubTenants());
-                            showSaveStatus(`Updated commission rate for ${tenant.tenant_name} to ${newRate}%`);
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded px-2 py-1">
+                          <span className="text-[9px] text-slate-400 uppercase font-bold">Rate:</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            defaultValue={tenant.commission_rate ?? 1.0}
+                            onBlur={async (e) => {
+                              const newRate = parseFloat(e.target.value) || 1.0;
+                              await db.saveHubTenant({ ...tenant, commission_rate: newRate });
+                              setHubTenants(await db.fetchHubTenants());
+                              showSaveStatus(`Updated commission rate for ${tenant.tenant_name} to ${newRate}%`);
+                            }}
+                            className="w-14 bg-slate-950 text-white text-xs font-mono px-1 py-0.5 rounded border border-slate-700 outline-none text-right"
+                          />
+                          <span className="text-xs font-mono text-slate-400">%</span>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setEditingTenant(tenant);
+                            setTenantFormData({
+                              name: tenant.tenant_name,
+                              category: tenant.category || "",
+                              code: tenant.referral_code,
+                              commission_rate: tenant.commission_rate ?? 1.0,
+                              pixel_id: tenant.pixel_id || "",
+                              description: tenant.description || "",
+                              whatsapp: tenant.contact_info?.whatsapp || "",
+                              phone: tenant.contact_info?.phone || "",
+                              email: tenant.contact_info?.email || ""
+                            });
+                            setIsAddingTenant(true);
                           }}
-                          className="w-14 bg-slate-950 text-white text-xs font-mono px-1 py-0.5 rounded border border-slate-700 outline-none text-right"
-                        />
-                        <span className="text-xs font-mono text-slate-400">%</span>
-                      </div>
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 hover:text-white"
+                          title="Edit Tenant"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
 
-                      <button
-                        onClick={() => {
-                          setEditingTenant(tenant);
-                          setTenantFormData({
-                            name: tenant.tenant_name,
-                            category: tenant.category || "",
-                            code: tenant.referral_code,
-                            commission_rate: tenant.commission_rate ?? 1.0,
-                            pixel_id: tenant.pixel_id || "",
-                            description: tenant.description || "",
-                            whatsapp: tenant.contact_info?.whatsapp || "",
-                            phone: tenant.contact_info?.phone || "",
-                            email: tenant.contact_info?.email || ""
-                          });
-                          setIsAddingTenant(true);
-                        }}
-                        className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 hover:text-white"
-                        title="Edit Tenant"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          const nextStatus = tenant.status === 'active' ? 'inactive' : 'active';
-                          await db.saveHubTenant({ ...tenant, status: nextStatus });
-                          setHubTenants(await db.fetchHubTenants());
-                          showSaveStatus(`${tenant.tenant_name} set to ${nextStatus}`);
-                        }}
-                        className={`px-2.5 py-1.5 rounded text-[9px] font-bold uppercase transition-colors ${tenant.status === 'active' ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'}`}
-                      >
-                        {tenant.status === 'active' ? 'Deactivate' : 'Activate'}
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          if (window.confirm(`Are you sure you want to remove tenant "${tenant.tenant_name}" (${tenant.referral_code})?`)) {
-                            await db.deleteHubTenant(tenant.id);
+                        <button
+                          onClick={async () => {
+                            const nextStatus = tenant.status === 'active' ? 'inactive' : 'active';
+                            await db.saveHubTenant({ ...tenant, status: nextStatus });
                             setHubTenants(await db.fetchHubTenants());
-                            showSaveStatus(`Tenant ${tenant.tenant_name} removed.`);
-                          }
-                        }}
-                        className="p-1.5 bg-red-950/60 hover:bg-red-900 rounded text-red-400"
-                        title="Delete Tenant"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                            showSaveStatus(`${tenant.tenant_name} set to ${nextStatus}`);
+                          }}
+                          className={`px-2.5 py-1.5 rounded text-[9px] font-bold uppercase transition-colors ${tenant.status === 'active' ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'}`}
+                        >
+                          {tenant.status === 'active' ? 'Deactivate' : 'Activate'}
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to remove tenant "${tenant.tenant_name}" (${tenant.referral_code})?`)) {
+                              await db.deleteHubTenant(tenant.id);
+                              setHubTenants(await db.fetchHubTenants());
+                              showSaveStatus(`Tenant ${tenant.tenant_name} removed.`);
+                            }
+                          }}
+                          className="p-1.5 bg-red-950/60 hover:bg-red-900 rounded text-red-400"
+                          title="Delete Tenant"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-6 border border-dashed border-slate-800 rounded-xl bg-slate-950 p-4">
+                    <p className="text-xs text-slate-400 mb-2">No tenants found in local cache.</p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const loaded = await db.fetchHubTenants();
+                        setHubTenants(loaded);
+                        showSaveStatus("Restored official tenant spaces!");
+                      }}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold uppercase cursor-pointer"
+                    >
+                      Restore Official Tenants
+                    </button>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 

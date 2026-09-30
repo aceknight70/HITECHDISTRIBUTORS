@@ -23,36 +23,82 @@ export async function base64ToBlob(base64: string): Promise<Blob> {
   return await res.blob();
 }
 
-// Upload file to 'hitech-images' public bucket
+// Upload file to 'hitech-images' public bucket with resilient optimized data URL fallback
 export async function uploadToSupabaseStorage(fileOrBlob: File | Blob, originalName?: string): Promise<string> {
-  let ext = "jpg";
-  if (fileOrBlob instanceof File) {
-    const parts = fileOrBlob.name.split(".");
-    if (parts.length > 1) ext = parts[parts.length - 1];
-  } else if (fileOrBlob.type) {
-    const parts = fileOrBlob.type.split("/");
-    if (parts.length > 1) ext = parts[1];
+  try {
+    let ext = "jpg";
+    if (fileOrBlob instanceof File) {
+      const parts = fileOrBlob.name.split(".");
+      if (parts.length > 1) ext = parts[parts.length - 1];
+    } else if (fileOrBlob.type) {
+      const parts = fileOrBlob.type.split("/");
+      if (parts.length > 1) ext = parts[1];
+    }
+
+    const uniqueName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+    
+    const { error } = await supabase.storage
+      .from("hitech-images")
+      .upload(uniqueName, fileOrBlob, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage
+        .from("hitech-images")
+        .getPublicUrl(uniqueName);
+      if (publicUrl) return publicUrl;
+    }
+  } catch (err) {
+    console.warn("Supabase storage upload fallback triggered:", err);
   }
 
-  const uniqueName = `upload-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-  
-  const { data, error } = await supabase.storage
-    .from("hitech-images")
-    .upload(uniqueName, fileOrBlob, {
-      cacheControl: "3600",
-      upsert: true,
-    });
+  // Resilient fallback: Convert to compressed Data URL
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) {
+        reject(new Error("Unable to read file content"));
+        return;
+      }
 
-  if (error) {
-    console.error("Storage upload error:", error);
-    throw new Error(`Failed to upload file to storage: ${error.message}`);
-  }
-
-  const { data: { publicUrl } } = supabase.storage
-    .from("hitech-images")
-    .getPublicUrl(uniqueName);
-
-  return publicUrl;
+      if (typeof window !== "undefined" && typeof Image !== "undefined") {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            const MAX_DIM = 1200;
+            let width = img.width;
+            let height = img.height;
+            if (width > height && width > MAX_DIM) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            } else if (height > MAX_DIM) {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL("image/jpeg", 0.85));
+              return;
+            }
+          } catch (e) {}
+          resolve(rawDataUrl);
+        };
+        img.onerror = () => resolve(rawDataUrl);
+        img.src = rawDataUrl;
+      } else {
+        resolve(rawDataUrl);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(fileOrBlob);
+  });
 }
 
 export async function fetchHubletAds() {
@@ -901,16 +947,52 @@ export interface MasterTenantNotification {
   created_at?: string;
 }
 
-// Fallback logic helper
-async function readFallback(client_id: string) {
-  const { data, error } = await supabase.from("client_channels").select("website").eq("client_id", client_id).single();
-  if (data?.website) {
-    try { return JSON.parse(data.website); } catch(e) {}
-  }
-  return [];
+// Fallback logic helper with infallible localStorage cache
+function getLocalItem<T>(key: string): T | null {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const val = window.localStorage.getItem(`hitech_${key}`);
+      return val ? JSON.parse(val) : null;
+    }
+  } catch (e) {}
+  return null;
 }
+
+function setLocalItem(key: string, payload: any) {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(`hitech_${key}`, JSON.stringify(payload));
+    }
+  } catch (e) {}
+}
+
+async function readFallback(client_id: string) {
+  // First try local cache for instant zero-latency retrieval
+  const local = getLocalItem(client_id);
+
+  try {
+    const { data, error } = await supabase.from("client_channels").select("website").eq("client_id", client_id).single();
+    if (!error && data?.website) {
+      const parsed = JSON.parse(data.website);
+      if (parsed) {
+        setLocalItem(client_id, parsed);
+        return parsed;
+      }
+    }
+  } catch(e) {}
+
+  if (local && Array.isArray(local) && local.length > 0) {
+    return local;
+  }
+  return local || [];
+}
+
 async function writeFallback(client_id: string, payload: any) {
-  await supabase.from("client_channels").upsert({ client_id, website: JSON.stringify(payload) }, { onConflict: "client_id" });
+  // Write to localStorage immediately so no updates are ever lost
+  setLocalItem(client_id, payload);
+  try {
+    await supabase.from("client_channels").upsert({ client_id, website: JSON.stringify(payload) }, { onConflict: "client_id" });
+  } catch (e) {}
 }
 
 export async function fetchHubAllies(): Promise<HubAlly[]> {
@@ -1074,18 +1156,49 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
 
   if (list.length === 0) {
     const fallback = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
-    if (fallback && fallback.length > 0) {
+    if (fallback && Array.isArray(fallback) && fallback.length > 0) {
       list = fallback;
     } else {
       list = [...DEFAULT_INITIAL_TENANTS];
     }
   }
 
+  // Guarantee that all 3 official initial tenants (Martins, Shama's Findings, Sumshi) are always present
+  for (const defTenant of DEFAULT_INITIAL_TENANTS) {
+    const existingIndex = list.findIndex(
+      t => t.id === defTenant.id || 
+           t.referral_code?.toUpperCase() === defTenant.referral_code.toUpperCase() ||
+           (t.tenant_name?.toLowerCase().includes("martins") && defTenant.tenant_name.toLowerCase().includes("martins")) ||
+           (t.tenant_name?.toLowerCase().includes("shama") && defTenant.tenant_name.toLowerCase().includes("shama")) ||
+           (t.tenant_name?.toLowerCase().includes("sumshi") && defTenant.tenant_name.toLowerCase().includes("sumshi"))
+    );
+
+    if (existingIndex === -1) {
+      list.push(defTenant);
+    } else {
+      // Keep existing custom edits (photos, etc.), but ensure referral_code is normalized and valid
+      const existing = list[existingIndex];
+      list[existingIndex] = {
+        ...defTenant,
+        ...existing,
+        // If it was the old "MARTINS" code, upgrade to official MARTINSQW13
+        referral_code: existing.referral_code === "MARTINS" ? "MARTINSQW13" : (existing.referral_code || defTenant.referral_code),
+        status: existing.status || "active",
+        photos: ensure30PhotoSlots(existing.photos || defTenant.photos)
+      };
+    }
+  }
+
   // Ensure every tenant has all 30 photo slots pre-filled
-  return list.map(t => ({
+  const processed = list.map(t => ({
     ...t,
     photos: ensure30PhotoSlots(t.photos)
   }));
+
+  // Sync to fallback & localStorage in background
+  writeFallback("hublet_tenants_fallback", processed);
+
+  return processed;
 }
 
 export async function saveHubTenant(tenant: HubTenant) {
@@ -1094,23 +1207,72 @@ export async function saveHubTenant(tenant: HubTenant) {
     photos: ensure30PhotoSlots(tenant.photos)
   };
 
+  // 1. Immediately persist to localStorage/fallback cache so no UI edits are lost
   try {
-    const { error } = await supabase.from("hublet_tenants").upsert(sanitizedTenant);
-    if (!error) return;
+    const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
+    const existingList = current && Array.isArray(current) && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
+    const updated = existingList.filter(t => t.id !== sanitizedTenant.id);
+    updated.push(sanitizedTenant);
+    await writeFallback("hublet_tenants_fallback", updated);
+  } catch (e) {
+    console.warn("Failed to write to fallback cache:", e);
+  }
+
+  // 2. Persist to Supabase database
+  try {
+    await supabase.from("hublet_tenants").upsert(sanitizedTenant);
   } catch (e) {}
-  
-  const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
-  const existingList = current && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
-  const updated = existingList.filter(t => t.id !== sanitizedTenant.id);
-  updated.push(sanitizedTenant);
-  await writeFallback("hublet_tenants_fallback", updated);
 }
 
 export async function deleteHubTenant(id: string) {
-  try { await supabase.from("hublet_tenants").delete().eq("id", id); } catch(e) {}
   const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
-  const existingList = current && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
+  const existingList = current && Array.isArray(current) && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
   await writeFallback("hublet_tenants_fallback", existingList.filter(t => t.id !== id));
+  try { await supabase.from("hublet_tenants").delete().eq("id", id); } catch(e) {}
+}
+
+// Robust matcher that accepts codes, variations, and tenant aliases
+export function findMatchingTenant(tenants: HubTenant[], queryCode: string): HubTenant | undefined {
+  if (!queryCode) return undefined;
+  const clean = queryCode.trim().toUpperCase();
+  const normalized = clean.replace(/[^A-Z0-9]/g, "");
+  if (!normalized) return undefined;
+
+  // 1. Exact match on referral_code
+  let match = tenants.find(t => t.referral_code?.trim().toUpperCase() === clean);
+  if (match) return match;
+
+  // 2. Normalized alphanumeric match on referral_code
+  match = tenants.find(t => (t.referral_code || "").replace(/[^A-Z0-9]/gi, "").toUpperCase() === normalized);
+  if (match) return match;
+
+  // 3. Martins alias matches (MARTINS, MARTINSQW13, MARTINS13, MARTIN)
+  if (normalized === "MARTINS" || normalized === "MARTINSQW13" || normalized === "MARTINS13" || normalized === "MARTIN") {
+    match = tenants.find(t => t.tenant_name.toLowerCase().includes("martins") || (t.referral_code || "").toUpperCase().includes("MARTINS"));
+    if (match) return match;
+  }
+
+  // 4. Shama's Findings alias matches (SHAMA, SHAMAS, SHAMASFINDINGS, SHAMASFINDINGS01, FAVOUR)
+  if (normalized.startsWith("SHAMA") || normalized.includes("FINDING") || normalized === "FAVOUR") {
+    match = tenants.find(t => t.tenant_name.toLowerCase().includes("shama") || (t.referral_code || "").toUpperCase().includes("SHAMA"));
+    if (match) return match;
+  }
+
+  // 5. Sumshi alias matches (SUMSHI, SUMSHIPOS, SUMSHI-POS)
+  if (normalized === "SUMSHI" || normalized.startsWith("SUMSHI")) {
+    match = tenants.find(t => t.tenant_name.toLowerCase().includes("sumshi") || (t.referral_code || "").toUpperCase().includes("SUMSHI"));
+    if (match) return match;
+  }
+
+  // 6. Substring match on tenant name or referral code
+  match = tenants.find(t => 
+    t.tenant_name.toUpperCase().includes(clean) || 
+    clean.includes(t.tenant_name.toUpperCase()) ||
+    (t.referral_code && clean.includes(t.referral_code.toUpperCase()))
+  );
+  if (match) return match;
+
+  return undefined;
 }
 
 export async function logAllyReferral(ally_id: string, referral_code: string) {
