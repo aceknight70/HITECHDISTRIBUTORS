@@ -24,6 +24,7 @@ export default function MasterSection() {
     name: "",
     category: "",
     code: "",
+    pin: "",
     commission_rate: 1.0,
     pixel_id: "",
     description: "",
@@ -612,6 +613,7 @@ export default function MasterSection() {
                       name: "",
                       category: "",
                       code: "",
+                      pin: "",
                       commission_rate: 1.0,
                       pixel_id: "",
                       description: "",
@@ -658,6 +660,17 @@ export default function MasterSection() {
                         value={tenantFormData.code}
                         onChange={e => setTenantFormData({ ...tenantFormData, code: e.target.value.toUpperCase() })}
                         placeholder="e.g. MARTINSQW13 or SHAMASFINDINGS01"
+                        className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-xs font-mono uppercase text-emerald-400 font-bold outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Direct Access PIN (e.g. 4444 for Favor) - No Password</label>
+                      <input
+                        type="text"
+                        value={tenantFormData.pin}
+                        onChange={e => setTenantFormData({ ...tenantFormData, pin: e.target.value.trim() })}
+                        placeholder="e.g. 4444"
                         className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-xs font-mono uppercase text-emerald-400 font-bold outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -767,6 +780,7 @@ export default function MasterSection() {
                           },
                           invoicing_enabled: true,
                           referral_code: finalCode,
+                          pin: tenantFormData.pin.trim() || (editingTenant?.pin || (tenantFormData.name.toLowerCase().includes("favour") ? "4444" : "")),
                           assigned_by: "master",
                           commission_rate: Number(tenantFormData.commission_rate) || 1.0,
                           pixel_id: tenantFormData.pixel_id.trim(),
@@ -808,7 +822,7 @@ export default function MasterSection() {
                           )}
                         </div>
                         <p className="text-[10px] font-mono text-emerald-400 mt-0.5">
-                          Code: <strong className="text-white">{tenant.referral_code}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
+                          Code: <strong className="text-white">{tenant.referral_code}</strong> • PIN: <strong className="text-emerald-300 font-bold">{tenant.pin || (tenant.tenant_name.toLowerCase().includes("favour") ? "4444" : "None")}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
                         </p>
                       </div>
 
@@ -837,6 +851,7 @@ export default function MasterSection() {
                               name: tenant.tenant_name,
                               category: tenant.category || "",
                               code: tenant.referral_code,
+                              pin: tenant.pin || (tenant.tenant_name?.toLowerCase().includes("favour") ? "4444" : ""),
                               commission_rate: tenant.commission_rate ?? 1.0,
                               pixel_id: tenant.pixel_id || "",
                               description: tenant.description || "",

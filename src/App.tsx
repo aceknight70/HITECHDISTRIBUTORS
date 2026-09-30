@@ -3244,7 +3244,7 @@ Issue: ${escDesc}`;
                     setTenantEntryCode(e.target.value.toUpperCase());
                     if (tenantCodeError) setTenantCodeError("");
                   }}
-                  placeholder="e.g. MARTINSQW13, SUMSHI, or SHAMASFINDINGS01"
+                  placeholder="e.g. 4444 (Favor's PIN), SHAMASFINDINGS01, MARTINSQW13, or SUMSHI"
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-500 tracking-wider"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -3256,7 +3256,7 @@ Issue: ${escDesc}`;
                         setTenantEntryCode("");
                         setTenantCodeError("");
                       } else {
-                        setTenantCodeError(`Code "${code}" not found.`);
+                        setTenantCodeError(`Code or PIN "${code}" not found.`);
                       }
                     }
                   }}
@@ -3271,7 +3271,7 @@ Issue: ${escDesc}`;
                       setTenantEntryCode("");
                       setTenantCodeError("");
                     } else {
-                      setTenantCodeError(`Code "${code}" not found.`);
+                      setTenantCodeError(`Code or PIN "${code}" not found.`);
                     }
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md flex-shrink-0"
@@ -3296,7 +3296,7 @@ Issue: ${escDesc}`;
                     title={`Click to enter ${t.tenant_name}'s storefront`}
                   >
                     <span>{t.tenant_name.split(" ")[0]}</span>
-                    <span className="text-slate-400 font-normal">({t.referral_code})</span>
+                    <span className="text-slate-400 font-normal">{t.pin ? `(PIN: ${t.pin})` : `(${t.referral_code})`}</span>
                   </button>
                 ))}
               </div>
@@ -3319,7 +3319,7 @@ Issue: ${escDesc}`;
                         }}
                         className="underline text-emerald-400 hover:text-emerald-300 cursor-pointer font-bold"
                       >
-                        {t.tenant_name.split(" ")[0]} ({t.referral_code})
+                        {t.tenant_name.split(" ")[0]} {t.pin ? `(PIN: ${t.pin})` : `(${t.referral_code})`}
                       </button>
                     ))}
                   </div>
@@ -3331,7 +3331,7 @@ Issue: ${escDesc}`;
                   onClick={() => setShowTenantSelfService(true)}
                   className="text-emerald-400 hover:text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <span>Merchant Self-Service (My Gallery · Products · Earnings)</span>
+                  <span>Merchant Self-Service (Enter PIN 4444 / Code)</span>
                   <span>→</span>
                 </button>
               </div>
@@ -7270,7 +7270,7 @@ Issue: ${escDesc}`;
                 className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-emerald-300 border border-emerald-800 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
                 title="Open Merchant Owner Self-Service Dashboard"
               >
-                <span>🔑 Merchant Owner</span>
+                <span>🔑 {activeTenantSpace.pin ? `Owner Space (PIN: ${activeTenantSpace.pin})` : 'Merchant Owner'}</span>
               </button>
               <button 
                 onClick={() => {

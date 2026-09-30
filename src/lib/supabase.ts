@@ -897,6 +897,7 @@ export interface HubTenant {
   };
   invoicing_enabled: boolean;
   referral_code: string;
+  pin?: string; // Direct access PIN (e.g. 4444 for Favour Atigolo) - No password needed
   assigned_by?: string; // 'master' | 'manager'
   commission_rate?: number; // e.g. 1.00
   pixel_id?: string;
@@ -1087,6 +1088,7 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "MARTINSQW13",
+    pin: "1111",
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1111,6 +1113,7 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "SHAMASFINDINGS01",
+    pin: "4444", // PIN for Favour to work from directly without password
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1135,6 +1138,7 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "SUMSHI",
+    pin: "2222",
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1183,17 +1187,35 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
         ...existing,
         // If it was the old "MARTINS" code, upgrade to official MARTINSQW13
         referral_code: existing.referral_code === "MARTINS" ? "MARTINSQW13" : (existing.referral_code || defTenant.referral_code),
+        pin: existing.pin || defTenant.pin,
         status: existing.status || "active",
         photos: ensure30PhotoSlots(existing.photos || defTenant.photos)
       };
     }
   }
 
-  // Ensure every tenant has all 30 photo slots pre-filled
-  const processed = list.map(t => ({
-    ...t,
-    photos: ensure30PhotoSlots(t.photos)
-  }));
+  // Ensure every tenant has all 30 photo slots pre-filled and Favour has PIN 4444
+  const processed = list.map(t => {
+    let pin = t.pin;
+    if (!pin) {
+      if (
+        t.id === "2bd9900a-c315-40ab-9e26-f59b62ba2a87" ||
+        t.tenant_name.toLowerCase().includes("favour") ||
+        t.tenant_name.toLowerCase().includes("shama")
+      ) {
+        pin = "4444";
+      } else if (t.tenant_name.toLowerCase().includes("martins")) {
+        pin = "1111";
+      } else if (t.tenant_name.toLowerCase().includes("sumshi")) {
+        pin = "2222";
+      }
+    }
+    return {
+      ...t,
+      pin,
+      photos: ensure30PhotoSlots(t.photos)
+    };
+  });
 
   // Sync to fallback & localStorage in background
   writeFallback("hublet_tenants_fallback", processed);
@@ -1231,35 +1253,63 @@ export async function deleteHubTenant(id: string) {
   try { await supabase.from("hublet_tenants").delete().eq("id", id); } catch(e) {}
 }
 
-// Robust matcher that accepts codes, variations, and tenant aliases
+// Robust matcher that accepts codes, PINs (e.g. 4444 for Favour Atigolo), variations, and tenant aliases
 export function findMatchingTenant(tenants: HubTenant[], queryCode: string): HubTenant | undefined {
   if (!queryCode) return undefined;
   const clean = queryCode.trim().toUpperCase();
   const normalized = clean.replace(/[^A-Z0-9]/g, "");
   if (!normalized) return undefined;
 
+  // 0. Direct PIN match (e.g. 4444 for Favour Atigolo, 1111 for Martins, 2222 for Sumshi)
+  let match = tenants.find(t => t.pin && t.pin.trim().toUpperCase() === clean);
+  if (match) return match;
+
+  // Direct check for PIN "4444" specifically requested for Favour Atigolo (Shama's Findings)
+  if (normalized === "4444") {
+    match = tenants.find(t => 
+      t.tenant_name.toLowerCase().includes("favour") || 
+      t.tenant_name.toLowerCase().includes("favor") || 
+      t.tenant_name.toLowerCase().includes("shama") ||
+      t.referral_code?.toUpperCase() === "SHAMASFINDINGS01"
+    );
+    if (match) return match;
+  }
+
   // 1. Exact match on referral_code
-  let match = tenants.find(t => t.referral_code?.trim().toUpperCase() === clean);
+  match = tenants.find(t => t.referral_code?.trim().toUpperCase() === clean);
   if (match) return match;
 
   // 2. Normalized alphanumeric match on referral_code
   match = tenants.find(t => (t.referral_code || "").replace(/[^A-Z0-9]/gi, "").toUpperCase() === normalized);
   if (match) return match;
 
-  // 3. Martins alias matches (MARTINS, MARTINSQW13, MARTINS13, MARTIN)
-  if (normalized === "MARTINS" || normalized === "MARTINSQW13" || normalized === "MARTINS13" || normalized === "MARTIN") {
+  // 3. Martins alias matches (MARTINS, MARTINSQW13, MARTINS13, MARTIN, 1111)
+  if (normalized === "MARTINS" || normalized === "MARTINSQW13" || normalized === "MARTINS13" || normalized === "MARTIN" || normalized === "1111") {
     match = tenants.find(t => t.tenant_name.toLowerCase().includes("martins") || (t.referral_code || "").toUpperCase().includes("MARTINS"));
     if (match) return match;
   }
 
-  // 4. Shama's Findings alias matches (SHAMA, SHAMAS, SHAMASFINDINGS, SHAMASFINDINGS01, FAVOUR)
-  if (normalized.startsWith("SHAMA") || normalized.includes("FINDING") || normalized === "FAVOUR") {
-    match = tenants.find(t => t.tenant_name.toLowerCase().includes("shama") || (t.referral_code || "").toUpperCase().includes("SHAMA"));
+  // 4. Shama's Findings / Favour Atigolo alias matches (SHAMA, SHAMAS, SHAMASFINDINGS, SHAMASFINDINGS01, FAVOUR, FAVOR, ATIGOLO, 4444)
+  if (
+    normalized.startsWith("SHAMA") || 
+    normalized.includes("FINDING") || 
+    normalized === "FAVOUR" || 
+    normalized === "FAVOR" ||
+    normalized.includes("ATIGOLO") ||
+    normalized === "4444"
+  ) {
+    match = tenants.find(t => 
+      t.tenant_name.toLowerCase().includes("shama") || 
+      t.tenant_name.toLowerCase().includes("favour") ||
+      t.tenant_name.toLowerCase().includes("favor") ||
+      (t.referral_code || "").toUpperCase().includes("SHAMA") ||
+      t.pin === "4444"
+    );
     if (match) return match;
   }
 
-  // 5. Sumshi alias matches (SUMSHI, SUMSHIPOS, SUMSHI-POS)
-  if (normalized === "SUMSHI" || normalized.startsWith("SUMSHI")) {
+  // 5. Sumshi alias matches (SUMSHI, SUMSHIPOS, SUMSHI-POS, 2222)
+  if (normalized === "SUMSHI" || normalized.startsWith("SUMSHI") || normalized === "2222") {
     match = tenants.find(t => t.tenant_name.toLowerCase().includes("sumshi") || (t.referral_code || "").toUpperCase().includes("SUMSHI"));
     if (match) return match;
   }

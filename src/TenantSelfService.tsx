@@ -114,7 +114,7 @@ export default function TenantSelfService({
     e.preventDefault();
     const code = inputCode.trim().toUpperCase();
     if (!code) {
-      setLoginError("Please enter your tenant referral code / ID.");
+      setLoginError("Please enter your PIN or referral code.");
       return;
     }
 
@@ -129,11 +129,14 @@ export default function TenantSelfService({
         setAuthenticatedTenant(match);
         setLoginError("");
       } else {
-        const availableCodes = allTenants.filter(t => t.status === 'active').map(t => `${t.tenant_name.split(" ")[0]} (${t.referral_code})`).join(", ");
-        setLoginError(`Referral Code "${code}" was not found. Registered merchants: ${availableCodes || "MARTINSQW13, SHAMASFINDINGS01, SUMSHI"}`);
+        const availableCodes = allTenants.filter(t => t.status === 'active').map(t => {
+          const pinNotice = t.pin ? ` (PIN: ${t.pin})` : ` (${t.referral_code})`;
+          return `${t.tenant_name.split(" ")[0]}${pinNotice}`;
+        }).join(", ");
+        setLoginError(`PIN or Code "${code}" was not found. Try entering PIN 4444 for Favour, or select a registered merchant: ${availableCodes || "Favour (PIN: 4444), Martins (MARTINSQW13), Sumshi (SUMSHI)"}`);
       }
     } catch (err) {
-      setLoginError("Error verifying code. Please try again.");
+      setLoginError("Error verifying PIN or code. Please try again.");
     } finally {
       setIsVerifying(false);
     }
@@ -324,17 +327,24 @@ export default function TenantSelfService({
             </div>
           </div>
 
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-5">
+          <div className="bg-emerald-950/40 p-4 rounded-xl border border-emerald-800/60 mb-5 text-slate-200 shadow-inner">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider mb-1">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Direct PIN / Code Access — No Password Required</span>
+            </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Enter your spoken-friendly <strong>Tenant Referral Code / ID</strong> below to unlock and manage your 30-slot photo gallery, product catalogue, and commission ledger.
+              No password is demanded. Enter your assigned <strong>PIN</strong> (e.g. <strong>4444</strong> for Favour Atigolo) or your Referral Code to enter your workspace and work immediately.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5">
-                Tenant Referral Code / ID *
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                  Tenant PIN or Referral Code *
+                </label>
+                <span className="text-[10px] font-semibold text-emerald-400 font-mono">No password required</span>
+              </div>
               <input
                 type="text"
                 value={inputCode}
@@ -342,18 +352,18 @@ export default function TenantSelfService({
                   setInputCode(e.target.value.toUpperCase());
                   setLoginError("");
                 }}
-                placeholder="e.g. SHAMASFINDINGS01, MARTINSQW13, or SUMSHI"
+                placeholder="Enter PIN (e.g. 4444 for Favor) or Referral Code"
                 className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3.5 py-3 text-sm font-mono text-white tracking-widest uppercase outline-none placeholder:text-slate-600"
                 autoFocus
               />
 
-              {/* Quick Demo Access Buttons */}
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {/* Quick Direct Access Buttons */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Quick Select:</span>
                 {[
-                  { name: "Martins", code: "MARTINSQW13" },
-                  { name: "Shama's Findings", code: "SHAMASFINDINGS01" },
-                  { name: "Sumshi", code: "SUMSHI" }
+                  { name: "Favour Atigolo", code: "4444", label: "Favour (PIN: 4444)" },
+                  { name: "Martins", code: "MARTINSQW13", label: "Martins (MARTINSQW13)" },
+                  { name: "Sumshi", code: "SUMSHI", label: "Sumshi (SUMSHI)" }
                 ].map(demo => (
                   <button
                     key={demo.code}
@@ -372,9 +382,9 @@ export default function TenantSelfService({
                         setIsVerifying(false);
                       }
                     }}
-                    className="text-[10px] font-mono font-bold bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-300 px-2 py-1 rounded transition-colors cursor-pointer"
+                    className="text-[10px] font-mono font-bold bg-emerald-950/70 hover:bg-emerald-900 border border-emerald-700/60 hover:border-emerald-400 text-emerald-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                   >
-                    {demo.name} ({demo.code})
+                    {demo.label}
                   </button>
                 ))}
               </div>
@@ -395,12 +405,12 @@ export default function TenantSelfService({
               {isVerifying ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Verifying Code...</span>
+                  <span>Verifying PIN / Code...</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Unlock Self-Service Dashboard</span>
+                  <span>Unlock Workspace (No Password Demanded)</span>
                 </>
               )}
             </button>
@@ -408,7 +418,7 @@ export default function TenantSelfService({
 
           <div className="mt-4 pt-4 border-t border-slate-800 text-center">
             <span className="text-[10px] text-slate-500 font-mono">
-              HiTech Hublet Rented Storefront Infrastructure
+              HiTech Hublet Rented Storefront Infrastructure • PIN / Code Access
             </span>
           </div>
         </div>
@@ -440,6 +450,12 @@ export default function TenantSelfService({
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
               <span>Code: <strong className="text-emerald-400">{authenticatedTenant.referral_code}</strong></span>
+              {authenticatedTenant.pin && (
+                <>
+                  <span>•</span>
+                  <span>PIN: <strong className="text-emerald-300 font-bold">{authenticatedTenant.pin}</strong></span>
+                </>
+              )}
               <span>•</span>
               <span>Comm: {authenticatedTenant.commission_rate ?? 1.0}%</span>
               {authenticatedTenant.pixel_id && (
