@@ -843,15 +843,62 @@ export interface HubTenant {
   description: string;
   category: string;
   photos: string[];
-  contact_info: any;
+  contact_info: {
+    phone?: string;
+    whatsapp?: string;
+    email?: string;
+    address?: string;
+  };
   invoicing_enabled: boolean;
   referral_code: string;
-  pixel_id: string;
+  assigned_by?: string; // 'master' | 'manager'
+  commission_rate?: number; // e.g. 1.00
+  pixel_id?: string;
   status: string; // 'active' | 'inactive'
   date_added: string;
-  // Locally tracked metrics
+  // Traffic metrics
   referral_entries?: number;
   discovery_entries?: number;
+}
+
+export interface HubTenantProduct {
+  id: string;
+  tenant_id: string;
+  product_name: string;
+  price: number | null; // nullable — "Price on request" if blank/0
+  description?: string;
+  photo_url?: string;
+  category?: string;
+  in_stock: boolean;
+  date_added?: string;
+  updated_at?: string;
+}
+
+export interface HubTenantCommission {
+  id: string;
+  tenant_id: string;
+  tenant_name?: string;
+  invoice_reference: string;
+  customer_name?: string;
+  sale_amount: number;
+  commission_rate_applied: number;
+  commission_amount: number;
+  status: "Pending" | "Paid" | "Reversed";
+  logged_by_staff?: string;
+  reversed_by?: string;
+  reversed_at?: string;
+  reversal_reason?: string;
+  created_at?: string;
+}
+
+export interface MasterTenantNotification {
+  id: string;
+  tenant_id: string;
+  tenant_name: string;
+  referral_code: string;
+  created_by: string; // 'manager'
+  acknowledged: boolean;
+  created_at?: string;
 }
 
 // Fallback logic helper
@@ -893,30 +940,177 @@ export async function deleteHubAlly(id: string) {
   await writeFallback("hublet_allies_fallback", current.filter(a => a.id !== id));
 }
 
+// 30 Generic Mockup Placeholders for Tenant Photo Slots
+export const DEFAULT_30_SLOT_MOCKUPS: string[] = [
+  "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1585386959984-a4155224a1ad?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1560343090-f0409e92791a?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1572635196237-14b3f281503f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1491553895911-0055eca6402d?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1576426863848-c21f53c60b19?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80"
+];
+
+// Helper to ensure tenant always has exactly 30 photo slots pre-filled with mockups
+export function ensure30PhotoSlots(photos?: string[]): string[] {
+  const existing = Array.isArray(photos) ? photos : [];
+  const result: string[] = [];
+  for (let i = 0; i < 30; i++) {
+    if (existing[i] && typeof existing[i] === "string" && existing[i].trim() !== "") {
+      result.push(existing[i]);
+    } else {
+      result.push(DEFAULT_30_SLOT_MOCKUPS[i] || DEFAULT_30_SLOT_MOCKUPS[0]);
+    }
+  }
+  return result;
+}
+
+export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
+  {
+    id: "a0000000-0000-0000-0000-000000000001",
+    tenant_name: "Martins",
+    category: "Solar & Inverter Systems",
+    description: "Certified solar installer and inverter technician. We provide custom home power audits, battery storage setup, and renewable energy maintenance across Lagos and Warri.",
+    photos: ensure30PhotoSlots([
+      "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=800&q=80"
+    ]),
+    contact_info: {
+      phone: "+2348033221144",
+      whatsapp: "+2348033221144",
+      email: "martins.solar@hitechhub.ng"
+    },
+    invoicing_enabled: true,
+    referral_code: "MARTINSQW13",
+    assigned_by: "master",
+    commission_rate: 1.0,
+    pixel_id: "",
+    status: "active",
+    date_added: new Date().toISOString(),
+    referral_entries: 0,
+    discovery_entries: 0
+  },
+  {
+    id: "2bd9900a-c315-40ab-9e26-f59b62ba2a87",
+    tenant_name: "Favour Atigolo (Shama's Findings)",
+    category: "Home, Personal & Food Essentials",
+    description: "Shama's Findings is an everyday-essentials brand built around three practical product lines: The Stain Rectifier (a 500ml multi-purpose cleaning and stain-removal product), female underwear and lingerie (sets, bralettes, camisoles, thongs, boxer pants, nightwear, loungewear), and crayfish products (flakes and headless crayfish for everyday cooking). Founded and run by Favour Toritsemofe Atigolo.",
+    photos: ensure30PhotoSlots([
+      "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=800&q=80"
+    ]),
+    contact_info: {
+      email: "elishamaatigolo@gmail.com",
+      phone: "+2347031489084",
+      whatsapp: "+2347031489084"
+    },
+    invoicing_enabled: true,
+    referral_code: "SHAMASFINDINGS01",
+    assigned_by: "master",
+    commission_rate: 1.0,
+    pixel_id: "",
+    status: "active",
+    date_added: new Date().toISOString(),
+    referral_entries: 0,
+    discovery_entries: 0
+  },
+  {
+    id: "a0000000-0000-0000-0000-000000000002",
+    tenant_name: "Sumshi",
+    category: "Solar Power & POS Systems",
+    description: "Commercial and retail merchant solutions. Specialist in fast merchant Android POS terminals, agency banking setups, and high-efficiency backup solar systems for shops.",
+    photos: ensure30PhotoSlots([
+      "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=800&q=80"
+    ]),
+    contact_info: {
+      phone: "+2348099887766",
+      whatsapp: "+2348099887766",
+      email: "sumshi.pos@hitechhub.ng"
+    },
+    invoicing_enabled: true,
+    referral_code: "SUMSHI",
+    assigned_by: "master",
+    commission_rate: 1.0,
+    pixel_id: "",
+    status: "active",
+    date_added: new Date().toISOString(),
+    referral_entries: 0,
+    discovery_entries: 0
+  }
+];
+
 export async function fetchHubTenants(): Promise<HubTenant[]> {
+  let list: HubTenant[] = [];
   try {
     const { data, error } = await supabase.from("hublet_tenants").select("*");
-    if (!error && data) return data as HubTenant[];
+    if (!error && data && data.length > 0) {
+      list = data as HubTenant[];
+    }
   } catch (e) {}
-  return await readFallback("hublet_tenants_fallback") as HubTenant[];
+
+  if (list.length === 0) {
+    const fallback = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
+    if (fallback && fallback.length > 0) {
+      list = fallback;
+    } else {
+      list = [...DEFAULT_INITIAL_TENANTS];
+    }
+  }
+
+  // Ensure every tenant has all 30 photo slots pre-filled
+  return list.map(t => ({
+    ...t,
+    photos: ensure30PhotoSlots(t.photos)
+  }));
 }
 
 export async function saveHubTenant(tenant: HubTenant) {
+  const sanitizedTenant = {
+    ...tenant,
+    photos: ensure30PhotoSlots(tenant.photos)
+  };
+
   try {
-    const { error } = await supabase.from("hublet_tenants").upsert(tenant);
+    const { error } = await supabase.from("hublet_tenants").upsert(sanitizedTenant);
     if (!error) return;
   } catch (e) {}
   
-  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
-  const updated = current.filter(t => t.id !== tenant.id);
-  updated.push(tenant);
+  const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
+  const existingList = current && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
+  const updated = existingList.filter(t => t.id !== sanitizedTenant.id);
+  updated.push(sanitizedTenant);
   await writeFallback("hublet_tenants_fallback", updated);
 }
 
 export async function deleteHubTenant(id: string) {
   try { await supabase.from("hublet_tenants").delete().eq("id", id); } catch(e) {}
-  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
-  await writeFallback("hublet_tenants_fallback", current.filter(t => t.id !== id));
+  const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
+  const existingList = current && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
+  await writeFallback("hublet_tenants_fallback", existingList.filter(t => t.id !== id));
 }
 
 export async function logAllyReferral(ally_id: string, referral_code: string) {
@@ -924,7 +1118,6 @@ export async function logAllyReferral(ally_id: string, referral_code: string) {
     await supabase.from("hublet_ally_referrals").insert({ ally_id, referral_code });
   } catch (e) {}
   
-  // Update local fallback count directly on the ally
   const current = await readFallback("hublet_allies_fallback") as HubAlly[];
   const updated = current.map(a => {
     if (a.id === ally_id) {
@@ -937,13 +1130,13 @@ export async function logAllyReferral(ally_id: string, referral_code: string) {
 
 export async function logTenantTraffic(tenant_id: string, referral_code: string, source_type: 'referral' | 'discovery') {
   try {
-    await supabase.from("hublet_tenant_traffic").insert({ tenant_id, referral_code, source_type });
+    await supabase.from("hublet_tenant_traffic").insert({ tenant_id, source: source_type });
   } catch(e) {}
   
-  // Update local fallback
-  const current = await readFallback("hublet_tenants_fallback") as HubTenant[];
-  const updated = current.map(t => {
-    if (t.id === tenant_id) {
+  const current = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
+  const existingList = current && current.length > 0 ? current : [...DEFAULT_INITIAL_TENANTS];
+  const updated = existingList.map(t => {
+    if (t.id === tenant_id || t.referral_code?.toUpperCase() === referral_code?.toUpperCase()) {
       if (source_type === 'referral') {
         return { ...t, referral_entries: (t.referral_entries || 0) + 1 };
       } else {
@@ -953,6 +1146,268 @@ export async function logTenantTraffic(tenant_id: string, referral_code: string,
     return t;
   });
   await writeFallback("hublet_tenants_fallback", updated);
+}
+
+// -------------------------------------------------------------
+// TENANT PRODUCTS API
+// -------------------------------------------------------------
+export const DEFAULT_TENANT_PRODUCTS: HubTenantProduct[] = [
+  // Favour Atigolo / Shama's Findings
+  {
+    id: "prod-shama-1",
+    tenant_id: "2bd9900a-c315-40ab-9e26-f59b62ba2a87",
+    product_name: "The Stain Rectifier (500ml)",
+    price: 4500,
+    description: "Multi-purpose cleaning and rapid fabric/surface stain-removal solution. Gentle on textiles, tough on deep grease and stains.",
+    photo_url: "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=600&q=80",
+    category: "Cleaning & Essentials",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  {
+    id: "prod-shama-2",
+    tenant_id: "2bd9900a-c315-40ab-9e26-f59b62ba2a87",
+    product_name: "Female Underwear & Intimates Collection",
+    price: 6500,
+    description: "Breathable cotton underwear, luxury sets, bralettes, camisoles, thongs, boxer pants, nightwear and comfy loungewear.",
+    photo_url: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=600&q=80",
+    category: "Fashion & Intimates",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  {
+    id: "prod-shama-3",
+    tenant_id: "2bd9900a-c315-40ab-9e26-f59b62ba2a87",
+    product_name: "Premium Dried Crayfish Flakes & Headless",
+    price: null, // Price on request
+    description: "Specially selected, sun-dried, sand-free headless crayfish and aromatic flakes for rich Nigerian soups and everyday cooking.",
+    photo_url: "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=600&q=80",
+    category: "Food Essentials",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  // Martins Solar
+  {
+    id: "prod-martins-1",
+    tenant_id: "a0000000-0000-0000-0000-000000000001",
+    product_name: "5kVA Pure Sine Wave Solar Hybrid Inverter",
+    price: 680000,
+    description: "High-power hybrid inverter with integrated MPPT solar charger for heavy home appliances and continuous power.",
+    photo_url: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=600&q=80",
+    category: "Solar & Inverters",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  {
+    id: "prod-martins-2",
+    tenant_id: "a0000000-0000-0000-0000-000000000001",
+    product_name: "540W Monocrystalline Solar Panel",
+    price: 125000,
+    description: "Tier 1 high efficiency half-cut cell solar module with 25-year manufacturer performance warranty.",
+    photo_url: "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?auto=format&fit=crop&w=600&q=80",
+    category: "Solar & Inverters",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  {
+    id: "prod-martins-3",
+    tenant_id: "a0000000-0000-0000-0000-000000000001",
+    product_name: "Solar Maintenance & Battery Health Audit",
+    price: null, // Price on request
+    description: "On-site battery equalization, inverter calibration, solar panel cleaning, and full home electrical load analysis.",
+    photo_url: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=600&q=80",
+    category: "Services & Audit",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  // Sumshi
+  {
+    id: "prod-sumshi-1",
+    tenant_id: "a0000000-0000-0000-0000-000000000002",
+    product_name: "Smart 4G Android POS Terminal",
+    price: 45000,
+    description: "High-speed touchscreen POS terminal with built-in thermal receipt printer, instant settlement, and quad-SIM support.",
+    photo_url: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&q=80",
+    category: "POS Terminals",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  },
+  {
+    id: "prod-sumshi-2",
+    tenant_id: "a0000000-0000-0000-0000-000000000002",
+    product_name: "Mini Solar Backup Station for POS & Routers",
+    price: 85000,
+    description: "Uninterrupted DC mini-UPS with solar panel input, keeping POS terminals, WiFi routers, and phones powered 24/7.",
+    photo_url: "https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=600&q=80",
+    category: "Solar & Power",
+    in_stock: true,
+    date_added: new Date().toISOString()
+  }
+];
+
+export async function fetchTenantProducts(tenantId?: string): Promise<HubTenantProduct[]> {
+  try {
+    let query = supabase.from("hublet_tenant_products").select("*");
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) return data as HubTenantProduct[];
+  } catch (e) {}
+  
+  const fallback = (await readFallback("hublet_tenant_products_fallback")) as HubTenantProduct[];
+  let allProds = fallback.length > 0 ? fallback : DEFAULT_TENANT_PRODUCTS;
+  if (tenantId) {
+    const tid = tenantId.toLowerCase();
+    return allProds.filter(p => {
+      if (p.tenant_id === tenantId) return true;
+      const ptid = p.tenant_id.toLowerCase();
+      // Martins match
+      if ((tid.includes("martins") || tid === "tenant-1" || tid === "a0000000-0000-0000-0000-000000000001") &&
+          (ptid.includes("martins") || ptid === "tenant-1" || ptid === "a0000000-0000-0000-0000-000000000001")) {
+        return true;
+      }
+      // Sumshi match
+      if ((tid.includes("sumshi") || tid === "tenant-2" || tid === "a0000000-0000-0000-0000-000000000002") &&
+          (ptid.includes("sumshi") || ptid === "tenant-2" || ptid === "a0000000-0000-0000-0000-000000000002")) {
+        return true;
+      }
+      // Favour / Shama match
+      if ((tid.includes("shama") || tid.includes("favour") || tid === "2bd9900a-c315-40ab-9e26-f59b62ba2a87") &&
+          (ptid.includes("shama") || ptid.includes("favour") || ptid === "2bd9900a-c315-40ab-9e26-f59b62ba2a87")) {
+        return true;
+      }
+      return false;
+    });
+  }
+  return allProds;
+}
+
+export async function saveTenantProduct(product: HubTenantProduct): Promise<void> {
+  try {
+    const { error } = await supabase.from("hublet_tenant_products").upsert({
+      ...product,
+      updated_at: new Date().toISOString()
+    });
+    if (!error) return;
+  } catch (e) {}
+
+  const current = (await readFallback("hublet_tenant_products_fallback")) as HubTenantProduct[];
+  const existingList = current.length > 0 ? current : [...DEFAULT_TENANT_PRODUCTS];
+  const updated = existingList.filter(p => p.id !== product.id);
+  updated.push({ ...product, updated_at: new Date().toISOString() });
+  await writeFallback("hublet_tenant_products_fallback", updated);
+}
+
+export async function deleteTenantProduct(productId: string): Promise<void> {
+  try {
+    await supabase.from("hublet_tenant_products").delete().eq("id", productId);
+  } catch (e) {}
+
+  const current = (await readFallback("hublet_tenant_products_fallback")) as HubTenantProduct[];
+  const existingList = current.length > 0 ? current : [...DEFAULT_TENANT_PRODUCTS];
+  const updated = existingList.filter(p => p.id !== productId);
+  await writeFallback("hublet_tenant_products_fallback", updated);
+}
+
+// -------------------------------------------------------------
+// TENANT COMMISSIONS API
+// -------------------------------------------------------------
+export async function fetchTenantCommissions(tenantId?: string): Promise<HubTenantCommission[]> {
+  try {
+    let query = supabase.from("hublet_tenant_commissions").select("*").order("created_at", { ascending: false });
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+    const { data, error } = await query;
+    if (!error && data) return data as HubTenantCommission[];
+  } catch (e) {}
+
+  const fallback = (await readFallback("hublet_tenant_commissions_fallback")) as HubTenantCommission[];
+  if (tenantId) {
+    return fallback.filter(c => c.tenant_id === tenantId);
+  }
+  return fallback;
+}
+
+export async function logTenantCommission(commission: Omit<HubTenantCommission, "id" | "created_at">): Promise<void> {
+  const newRow = {
+    ...commission,
+    id: "comm-" + Date.now() + Math.random().toString(36).substring(5),
+    created_at: new Date().toISOString()
+  };
+  try {
+    const { error } = await supabase.from("hublet_tenant_commissions").insert(newRow);
+    if (!error) return;
+  } catch (e) {}
+
+  const current = (await readFallback("hublet_tenant_commissions_fallback")) as HubTenantCommission[];
+  current.unshift(newRow);
+  await writeFallback("hublet_tenant_commissions_fallback", current);
+}
+
+export async function updateCommissionStatus(
+  commissionId: string, 
+  status: "Pending" | "Paid" | "Reversed",
+  reversalReason?: string,
+  reversedBy?: string
+): Promise<void> {
+  const updates: any = { status };
+  if (status === "Reversed") {
+    updates.reversed_at = new Date().toISOString();
+    updates.reversed_by = reversedBy || "Master/Manager";
+    updates.reversal_reason = reversalReason || "Order cancelled or reversed";
+  }
+
+  try {
+    const { error } = await supabase.from("hublet_tenant_commissions").update(updates).eq("id", commissionId);
+    if (!error) return;
+  } catch (e) {}
+
+  const current = (await readFallback("hublet_tenant_commissions_fallback")) as HubTenantCommission[];
+  const updated = current.map(c => c.id === commissionId ? { ...c, ...updates } : c);
+  await writeFallback("hublet_tenant_commissions_fallback", updated);
+}
+
+// -------------------------------------------------------------
+// MASTER TENANT NOTIFICATIONS API
+// -------------------------------------------------------------
+export async function fetchMasterTenantNotifications(): Promise<MasterTenantNotification[]> {
+  try {
+    const { data, error } = await supabase
+      .from("hitech_master_tenant_notifications")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (!error && data) return data as MasterTenantNotification[];
+  } catch (e) {}
+
+  return (await readFallback("master_tenant_notifications_fallback")) as MasterTenantNotification[];
+}
+
+export async function createMasterTenantNotification(notif: Omit<MasterTenantNotification, "id" | "created_at">): Promise<void> {
+  const newRow = {
+    ...notif,
+    id: "notif-" + Date.now(),
+    created_at: new Date().toISOString()
+  };
+  try {
+    const { error } = await supabase.from("hitech_master_tenant_notifications").insert(newRow);
+    if (!error) return;
+  } catch (e) {}
+
+  const current = (await readFallback("master_tenant_notifications_fallback")) as MasterTenantNotification[];
+  current.unshift(newRow);
+  await writeFallback("master_tenant_notifications_fallback", current);
+}
+
+export async function acknowledgeMasterTenantNotification(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("hitech_master_tenant_notifications")
+      .update({ acknowledged: true })
+      .eq("id", id);
+    if (!error) return;
+  } catch (e) {}
+
+  const current = (await readFallback("master_tenant_notifications_fallback")) as MasterTenantNotification[];
+  const updated = current.map(n => n.id === id ? { ...n, acknowledged: true } : n);
+  await writeFallback("master_tenant_notifications_fallback", updated);
 }
 // ==========================================
 

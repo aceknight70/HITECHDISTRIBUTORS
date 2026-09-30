@@ -60,15 +60,16 @@ import {
   Edit,
   Moon,
   Users,
-  Store, Handshake, ExternalLink, Bot, ArrowLeft
+  Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
-import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, HubAlly, HubTenant } from "./lib/supabase";
+import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, MasterTenantNotification } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
 import MasterSection from "./MasterSection";
+import TenantSelfService from "./TenantSelfService";
 import { GalleryCard, getCategoryFallbackImage } from "./components/GalleryCard";
 
 // Global constant fallback config
@@ -1005,9 +1006,60 @@ export default function App() {
   const [showAllyDirectory, setShowAllyDirectory] = useState(false);
   const [showTenantDirectory, setShowTenantDirectory] = useState(false);
   const [tenantEntryCode, setTenantEntryCode] = useState("");
+  // Confirmation screen state
+  const [pendingTenantConfirmation, setPendingTenantConfirmation] = useState<{ tenant: HubTenant; source: 'referral' | 'discovery' } | null>(null);
+  const [invoiceTenantCode, setInvoiceTenantCode] = useState("");
+  const [currentTenantProducts, setCurrentTenantProducts] = useState<HubTenantProduct[]>([]);
+  const [loadingTenantProducts, setLoadingTenantProducts] = useState(false);
+  const [tenantCommissions, setTenantCommissions] = useState<HubTenantCommission[]>([]);
+  const [selectedTenantForProducts, setSelectedTenantForProducts] = useState<HubTenant | null>(null);
+  const [tenantProductsList, setTenantProductsList] = useState<HubTenantProduct[]>([]);
+  const [addingProductToTenant, setAddingProductToTenant] = useState(false);
+  const [copiedTenantCode, setCopiedTenantCode] = useState(false);
   // Manager Hub forms
   const [addingAlly, setAddingAlly] = useState(false);
   const [addingTenant, setAddingTenant] = useState(false);
+  const [tenantCodeError, setTenantCodeError] = useState("");
+  const [showTenantSelfService, setShowTenantSelfService] = useState(false);
+  const [tenantSelfServiceInitialTenant, setTenantSelfServiceInitialTenant] = useState<HubTenant | null>(null);
+  const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
+  const [rcpPromoCode, setRcpPromoCode] = useState("");
+  const [rcpCommissionLogged, setRcpCommissionLogged] = useState<string | null>(null);
+
+  // Meta Pixel tracking effect for active tenant space
+  useEffect(() => {
+    if (activeTenantSpace?.pixel_id) {
+      const pid = activeTenantSpace.pixel_id.trim();
+      if (pid && typeof window !== "undefined") {
+        try {
+          (window as any)._fbq = (window as any)._fbq || [];
+          const fbq = function() {
+            ((window as any)._fbq).push(arguments);
+          };
+          (window as any).fbq = (window as any).fbq || fbq;
+          (window as any).fbq('init', pid);
+          (window as any).fbq('track', 'PageView');
+          (window as any).fbq('track', 'ViewContent', {
+            content_name: activeTenantSpace.tenant_name,
+            content_category: activeTenantSpace.category
+          });
+        } catch (e) {
+          console.warn("Meta Pixel tracking notice:", e);
+        }
+      }
+    }
+  }, [activeTenantSpace]);
+
+  // Lock background body scroll whenever tenant space or modal is open to ensure internal scrolling works 100%
+  useEffect(() => {
+    if (activeTenantSpace || showTenantDirectory || pendingTenantConfirmation || showAllyDirectory || activeAllyModal || showTenantSelfService || lightboxPhotoIndex !== null) {
+      const origOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = origOverflow;
+      };
+    }
+  }, [activeTenantSpace, showTenantDirectory, pendingTenantConfirmation, showAllyDirectory, activeAllyModal, showTenantSelfService, lightboxPhotoIndex]);
 
   const [staffDirectory, setStaffDirectory] = useState([
     { id: "HTD-001", name: "Alice K.", role: "Sales Rep" },
@@ -1691,6 +1743,40 @@ export default function App() {
     localStorage.setItem("ht_display_floor_config", JSON.stringify(displayFloorSelection));
   }, [displayFloorSelection]);
 
+  useEffect(() => {
+    if (activeTenantSpace) {
+      setLoadingTenantProducts(true);
+      db.fetchTenantProducts(activeTenantSpace.id)
+        .then(prods => {
+          setCurrentTenantProducts(prods.filter(p => p.in_stock));
+        })
+        .catch(err => {
+          console.error("Failed to load tenant products:", err);
+        })
+        .finally(() => {
+          setLoadingTenantProducts(false);
+        });
+    }
+  }, [activeTenantSpace]);
+
+  useEffect(() => {
+    if (selectedTenantForProducts) {
+      db.fetchTenantProducts(selectedTenantForProducts.id)
+        .then(prods => {
+          setTenantProductsList(prods);
+        })
+        .catch(err => {
+          console.error("Failed to load products list:", err);
+        });
+    }
+  }, [selectedTenantForProducts]);
+
+  useEffect(() => {
+    if (activeManagerTab === "tenant") {
+      db.fetchTenantCommissions().then(comms => setTenantCommissions(comms));
+    }
+  }, [activeManagerTab]);
+
   const displayedProducts = React.useMemo(() => {
     let list: Product[] = [];
     
@@ -1987,6 +2073,30 @@ export default function App() {
       console.error("Supabase save failed, falling back to local list:", e);
       const localOrders = JSON.parse(localStorage.getItem("ht_orders") || "[]");
       localStorage.setItem("ht_orders", JSON.stringify([orderRecord, ...localOrders]));
+    }
+
+    // Auto-record Tenant Commission if promo code used
+    if (invoiceTenantCode) {
+      const matchedTenant = hubTenants.find(t => t.referral_code.toUpperCase() === invoiceTenantCode.trim().toUpperCase());
+      if (matchedTenant) {
+        const rate = matchedTenant.commission_rate ?? 1.0;
+        const commAmount = (totalAmount * rate) / 100;
+        try {
+          await db.logTenantCommission({
+            tenant_id: matchedTenant.id,
+            tenant_name: matchedTenant.tenant_name,
+            invoice_reference: newInvoiceId,
+            customer_name: customerName,
+            sale_amount: totalAmount,
+            commission_rate_applied: rate,
+            commission_amount: commAmount,
+            status: "Pending",
+            logged_by_staff: "Point of Sale"
+          });
+        } catch (err) {
+          console.error("Failed to log tenant commission:", err);
+        }
+      }
     }
 
     const waText = `📋 New Invoice #${newInvoiceId} from ${customerName}
@@ -3049,48 +3159,60 @@ Issue: ${escDesc}`;
               ))}
             </div>
 
-            {/* HubAlly & HubTenant Buttons */}
-            <div className="mt-4 flex flex-col gap-2">
-              <p className="text-[10px] text-center text-slate-400 italic font-serif leading-relaxed px-4 mb-1">
-                Discover our trusted partners and rented spaces — tap to explore
+            {/* HubTenant & HubAlly Discovery Section */}
+            <div className="mt-4 flex flex-col gap-2.5">
+              <p className="text-[11px] text-center text-slate-700 font-semibold uppercase tracking-wider px-2 flex items-center justify-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Discover our tenant spaces — tap to explore</span>
               </p>
+              
               <div className="grid grid-cols-2 gap-3">
                 <button 
-                  onClick={() => setShowAllyDirectory(true)}
-                  className="relative overflow-hidden rounded-xl h-14 border border-blue-500/30 shadow-lg group"
+                  onClick={() => setShowTenantDirectory(true)}
+                  className="relative overflow-hidden rounded-xl h-16 border-2 border-emerald-500/60 shadow-[0_4px_15px_rgba(16,185,129,0.3)] group cursor-pointer text-left transition-all active:scale-[0.98]"
                 >
-                  <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32b7?auto=format&fit=crop&w=400&q=80" alt="HubAlly" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-blue-900/50 group-hover:bg-blue-900/40 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center border border-white/20 shadow-md">
-                        <Handshake className="w-3.5 h-3.5 text-white" />
+                  <img src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=80" alt="HubTenant" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-emerald-950/85 to-emerald-900/70 group-hover:bg-emerald-900/60 transition-colors p-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center border-2 border-white/30 shadow-md flex-shrink-0">
+                        <Store className="w-4 h-4 text-white" />
                       </div>
-                      <h3 className="text-xs font-black text-white uppercase tracking-widest drop-shadow-md">
-                        HubAlly
-                      </h3>
+                      <div>
+                        <h3 className="text-xs font-black text-white uppercase tracking-wider drop-shadow-md">
+                          HubTenant
+                        </h3>
+                        <span className="text-[8px] text-emerald-300 font-mono font-bold uppercase tracking-wider block">
+                          Explore Stores
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </button>
+
                 <button 
-                  onClick={() => setShowTenantDirectory(true)}
-                  className="relative overflow-hidden rounded-xl h-14 border border-emerald-500/30 shadow-lg group"
+                  onClick={() => setShowAllyDirectory(true)}
+                  className="relative overflow-hidden rounded-xl h-16 border-2 border-blue-500/50 shadow-[0_4px_15px_rgba(37,99,235,0.25)] group cursor-pointer text-left transition-all active:scale-[0.98]"
                 >
-                  <img src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=400&q=80" alt="HubTenant" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
-                  <div className="absolute inset-0 flex items-center justify-center bg-emerald-900/50 group-hover:bg-emerald-900/40 transition-colors">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center border border-white/20 shadow-md">
-                        <Store className="w-3.5 h-3.5 text-white" />
+                  <img src="https://images.unsplash.com/photo-1556761175-5973dc0f32b7?auto=format&fit=crop&w=400&q=80" alt="HubAlly" className="absolute inset-0 w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-r from-blue-950/85 to-blue-900/70 group-hover:bg-blue-900/60 transition-colors p-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center border-2 border-white/30 shadow-md flex-shrink-0">
+                        <Handshake className="w-4 h-4 text-white" />
                       </div>
-                      <h3 className="text-xs font-black text-white uppercase tracking-widest drop-shadow-md">
-                        HubTenant
-                      </h3>
+                      <div>
+                        <h3 className="text-xs font-black text-white uppercase tracking-wider drop-shadow-md">
+                          HubAlly
+                        </h3>
+                        <span className="text-[8px] text-blue-300 font-mono font-bold uppercase tracking-wider block">
+                          Partnerships
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </button>
               </div>
             </div>
           </div>
-
 
           {/* HiTech Distributors Storefront Facade - Styled with a beautiful glowing dark blue border */}
           <div className="my-6 overflow-hidden rounded-xl border-2 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.2)] relative h-[220px] bg-slate-900 flex justify-center items-center">
@@ -3128,41 +3250,76 @@ Issue: ${escDesc}`;
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => { setInStore(true); setCurrentRoom("showroom"); }}
-              className="w-full py-4 bg-[#1a2a4a] text-white font-bold uppercase tracking-widest text-xs border-2 border-[#1a2a4a] hover:bg-white hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(26,42,74,1)] hover:shadow-none"
+              className="w-full py-4 bg-[#1a2a4a] text-white font-bold uppercase tracking-widest text-xs border-2 border-[#1a2a4a] hover:bg-white hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(26,42,74,1)] hover:shadow-none cursor-pointer"
             >
               Enter Showroom →
             </motion.button>
 
             {/* Enter Tenant ID Flow */}
-            <div className="mt-4 p-4 border border-slate-700 bg-slate-900 rounded-lg shadow-inner">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5"><Store className="w-4 h-4"/> Have a Tenant Code?</h4>
+            <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200">
+              <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                <Store className="w-4 h-4 text-emerald-400"/> Enter Tenant ID
+              </h4>
+              <p className="text-[11px] text-slate-300 mb-3 leading-relaxed">
+                Have a merchant or field agent code? Enter it below to visit their personalized storefront.
+              </p>
               <div className="flex gap-2">
                 <input 
                   type="text" 
                   value={tenantEntryCode}
-                  onChange={(e) => setTenantEntryCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. MARTINS"
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-600"
-                />
-                <button 
-                  onClick={async () => {
-                    const matched = hubTenants.find(t => t.referral_code.toUpperCase() === tenantEntryCode.toUpperCase() && t.status === 'active');
-                    if (matched) {
-                      if (!sessionStorage.getItem('logged_tenant_ref_' + matched.id)) {
-                        await logTenantTraffic(matched.id, matched.referral_code, 'referral');
-                        sessionStorage.setItem('logged_tenant_ref_' + matched.id, 'true');
+                  onChange={(e) => {
+                    setTenantEntryCode(e.target.value.toUpperCase());
+                    if (tenantCodeError) setTenantCodeError("");
+                  }}
+                  placeholder="e.g. MARTINSQW13, SUMSHI, or SHAMASFINDINGS01"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-500 tracking-wider"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const code = tenantEntryCode.trim();
+                      if (!code) return;
+                      const matched = hubTenants.find(t => t.referral_code.toUpperCase() === code.toUpperCase() && t.status === 'active');
+                      if (matched) {
+                        setPendingTenantConfirmation({ tenant: matched, source: 'referral' });
+                        setTenantEntryCode("");
+                        setTenantCodeError("");
+                      } else {
+                        setTenantCodeError(`Code "${code}" not found. Try MARTINSQW13, SUMSHI, or SHAMASFINDINGS01`);
                       }
-                      setInStore(true);
-                      setCurrentRoom("showroom");
-                      setActiveTenantSpace(matched);
-                      setTenantEntryCode("");
-                    } else {
-                      alert("Invalid or inactive Tenant Code.");
                     }
                   }}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded text-[10px] uppercase tracking-wider transition-colors"
+                />
+                <button 
+                  onClick={() => {
+                    const code = tenantEntryCode.trim();
+                    if (!code) return;
+                    const matched = hubTenants.find(t => t.referral_code.toUpperCase() === code.toUpperCase() && t.status === 'active');
+                    if (matched) {
+                      setPendingTenantConfirmation({ tenant: matched, source: 'referral' });
+                      setTenantEntryCode("");
+                      setTenantCodeError("");
+                    } else {
+                      setTenantCodeError(`Code "${code}" not found. Try MARTINSQW13, SUMSHI, or SHAMASFINDINGS01`);
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md flex-shrink-0"
                 >
-                  Enter
+                  Verify & Enter
+                </button>
+              </div>
+              {tenantCodeError && (
+                <div className="mt-2.5 p-2.5 bg-red-950/80 border border-red-800 text-red-300 rounded text-[11px] font-mono flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <span>{tenantCodeError}</span>
+                </div>
+              )}
+              <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between items-center text-[10px]">
+                <span className="text-slate-400">Rented space owner?</span>
+                <button
+                  onClick={() => setShowTenantSelfService(true)}
+                  className="text-emerald-400 hover:text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span>Merchant Self-Service (My Gallery · Products · Earnings)</span>
+                  <span>→</span>
                 </button>
               </div>
             </div>
@@ -3789,6 +3946,19 @@ Issue: ${escDesc}`;
                             value={customerEmail}
                             onChange={(e) => setCustomerEmail(e.target.value)}
                             className="w-full bg-slate-50 rounded border border-slate-300 px-3 py-2 text-sm text-[#1a1a2e] outline-none focus:border-[#1a73e8]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+                            <span>Tenant / Agent Referral Code (Optional)</span>
+                            {invoiceTenantCode && <span className="text-emerald-600 font-mono text-[9px] font-bold">✓ APPLIED: {invoiceTenantCode}</span>}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. SHAMASFINDINGS01 or MARTINSQW13"
+                            value={invoiceTenantCode}
+                            onChange={(e) => setInvoiceTenantCode(e.target.value.toUpperCase())}
+                            className="w-full bg-slate-50 rounded border border-slate-300 px-3 py-2 text-sm text-[#1a1a2e] font-mono uppercase outline-none focus:border-emerald-500"
                           />
                         </div>
                         <button
@@ -5022,108 +5192,325 @@ Issue: ${escDesc}`;
                     )}
 
                     {activeManagerTab === "tenant" && (
-                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                        <div className="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
-                          <h4 className="font-bold text-[13px] text-white uppercase">HubTenant Configuration</h4>
-                          <button onClick={() => setActiveManagerTab("menu")} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
+                      <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-4">
+                        <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                          <div>
+                            <h4 className="font-bold text-[13px] text-white uppercase flex items-center gap-2">
+                              <Store className="w-4 h-4 text-emerald-400" /> HubTenant Management
+                            </h4>
+                            <p className="text-[10px] text-slate-400">Manage rented storefronts, self-service products, and commissions</p>
+                          </div>
+                          <button onClick={() => { setActiveManagerTab("menu"); setSelectedTenantForProducts(null); }} className="text-[10px] font-bold text-[var(--yl)] uppercase hover:underline">← Back</button>
                         </div>
                         
+                        {/* Tenant Product Modal / Sub-view */}
+                        {selectedTenantForProducts && (
+                          <div className="bg-slate-900 border-2 border-emerald-500/50 rounded-xl p-4 flex flex-col gap-3 shadow-xl">
+                            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                              <div>
+                                <h5 className="text-xs font-black text-white uppercase flex items-center gap-1.5">
+                                  <span>📦 Products for:</span>
+                                  <span className="text-emerald-400">{selectedTenantForProducts.tenant_name}</span>
+                                </h5>
+                                <span className="text-[10px] text-slate-400 font-mono">Code: {selectedTenantForProducts.referral_code}</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => setAddingProductToTenant(true)}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold uppercase tracking-wider"
+                                >
+                                  + New Product
+                                </button>
+                                <button 
+                                  onClick={() => setSelectedTenantForProducts(null)}
+                                  className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold"
+                                >
+                                  ✕ Close
+                                </button>
+                              </div>
+                            </div>
+
+                            {addingProductToTenant && (
+                              <div className="bg-slate-950 border border-emerald-900/60 p-3 rounded-lg flex flex-col gap-2">
+                                <h6 className="text-[10px] font-bold text-emerald-400 uppercase">Add New Product to Storefront</h6>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input id="prod-name" placeholder="Product Name *" className="bg-slate-900 border border-slate-700 p-2 rounded text-xs text-white" />
+                                  <input id="prod-price" type="number" placeholder="Price (₦) — leave blank for Price on Request" className="bg-slate-900 border border-slate-700 p-2 rounded text-xs text-white" />
+                                  <input id="prod-cat" placeholder="Category (e.g. Essentials)" className="bg-slate-900 border border-slate-700 p-2 rounded text-xs text-white" />
+                                  <input id="prod-photo" placeholder="Photo URL" className="bg-slate-900 border border-slate-700 p-2 rounded text-xs text-white" />
+                                  <textarea id="prod-desc" placeholder="Product Description" rows={2} className="col-span-2 bg-slate-900 border border-slate-700 p-2 rounded text-xs text-white" />
+                                </div>
+                                <div className="flex gap-2 mt-1">
+                                  <button
+                                    onClick={async () => {
+                                      const name = (document.getElementById('prod-name') as HTMLInputElement).value;
+                                      if (!name) return alert("Product name is required.");
+                                      const priceVal = (document.getElementById('prod-price') as HTMLInputElement).value;
+                                      const priceNum = priceVal ? parseFloat(priceVal) : null;
+                                      const newProd: HubTenantProduct = {
+                                        id: "prod-" + Date.now(),
+                                        tenant_id: selectedTenantForProducts.id,
+                                        product_name: name,
+                                        price: priceNum,
+                                        category: (document.getElementById('prod-cat') as HTMLInputElement).value || selectedTenantForProducts.category,
+                                        photo_url: (document.getElementById('prod-photo') as HTMLInputElement).value || "https://images.unsplash.com/photo-1583947215259-38e31be8751f?auto=format&fit=crop&w=600&q=80",
+                                        description: (document.getElementById('prod-desc') as HTMLTextAreaElement).value,
+                                        in_stock: true,
+                                        date_added: new Date().toISOString()
+                                      };
+                                      await db.saveTenantProduct(newProd);
+                                      const updatedList = await db.fetchTenantProducts(selectedTenantForProducts.id);
+                                      setTenantProductsList(updatedList);
+                                      setAddingProductToTenant(false);
+                                    }}
+                                    className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-white text-[10px] font-bold uppercase tracking-wider"
+                                  >
+                                    Save Product
+                                  </button>
+                                  <button
+                                    onClick={() => setAddingProductToTenant(false)}
+                                    className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-[10px] font-bold uppercase tracking-wider"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                              {tenantProductsList.length === 0 ? (
+                                <p className="text-[11px] text-slate-500 text-center py-4 italic">No products listed for this tenant yet.</p>
+                              ) : (
+                                tenantProductsList.map(prod => (
+                                  <div key={prod.id} className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex justify-between items-center text-xs">
+                                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                      {prod.photo_url ? (
+                                        <img src={prod.photo_url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center flex-shrink-0"><Store className="w-4 h-4 text-slate-500"/></div>
+                                      )}
+                                      <div className="min-w-0">
+                                        <h6 className="font-bold text-white truncate">{prod.product_name}</h6>
+                                        <p className="text-[10px] text-emerald-400 font-mono">
+                                          {prod.price ? `₦${Number(prod.price).toLocaleString()}` : "Price on request"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <button
+                                        onClick={async () => {
+                                          await db.saveTenantProduct({ ...prod, in_stock: !prod.in_stock });
+                                          setTenantProductsList(await db.fetchTenantProducts(selectedTenantForProducts.id));
+                                        }}
+                                        className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${prod.in_stock ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'}`}
+                                      >
+                                        {prod.in_stock ? "In Stock" : "Out of Stock"}
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          if (confirm(`Delete ${prod.product_name}?`)) {
+                                            await db.deleteTenantProduct(prod.id);
+                                            setTenantProductsList(await db.fetchTenantProducts(selectedTenantForProducts.id));
+                                          }
+                                        }}
+                                        className="p-1 bg-red-950/60 hover:bg-red-900 rounded text-red-400"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex justify-between items-center">
-                          <h5 className="text-[10px] uppercase font-bold text-slate-400">Tenants Directory</h5>
-                          <button onClick={() => setAddingTenant(true)} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] font-bold text-white uppercase tracking-wider">
-                            + Add Tenant
+                          <h5 className="text-[10px] uppercase font-bold text-slate-400">Active Tenants ({hubTenants.length})</h5>
+                          <button onClick={() => setAddingTenant(true)} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 rounded text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-1">
+                            <Plus className="w-3 h-3" /> Add Tenant
                           </button>
                         </div>
 
                         {addingTenant && (
                           <div className="bg-slate-900 border border-emerald-900/50 p-4 rounded-xl flex flex-col gap-3">
-                            <h6 className="text-[10px] uppercase text-emerald-400 font-bold mb-2 border-b border-emerald-900/30 pb-1">New Tenant Space</h6>
-                            <div className="grid grid-cols-2 gap-3">
-                              <input id="ten-name" placeholder="Tenant Name (e.g. Martins)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
-                              <input id="ten-cat" placeholder="Category (e.g. Solar)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
-                              <input id="ten-desc" placeholder="Bio/Description" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                            <h6 className="text-[10px] uppercase text-emerald-400 font-bold mb-1 border-b border-emerald-900/30 pb-1">New Tenant Registration</h6>
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <input id="ten-name" placeholder="Tenant / Brand Name *" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-cat" placeholder="Category (e.g. Solar, Home Essentials)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-code" placeholder="Referral Code (e.g. SHAMAS01)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs font-mono uppercase text-white" />
+                              <input id="ten-comm" type="number" step="0.1" defaultValue="1.0" placeholder="Commission % (e.g. 1.0)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <textarea id="ten-desc" placeholder="Bio / Storefront Description" rows={2} className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
                               <input id="ten-photo" placeholder="Primary Photo URL" className="col-span-2 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
-                              <input id="ten-whatsapp" placeholder="WhatsApp Number" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-whatsapp" placeholder="WhatsApp (e.g. +234...)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-phone" placeholder="Phone Number" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
+                              <input id="ten-email" placeholder="Email Address (Optional)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
                               <input id="ten-pixel" placeholder="Meta Pixel ID (Optional)" className="bg-slate-950 border border-slate-800 p-2 rounded text-xs text-white" />
                             </div>
                             <div className="flex gap-2 mt-2">
                               <button onClick={async () => {
                                 const name = (document.getElementById('ten-name') as HTMLInputElement).value;
-                                if (!name) return;
+                                if (!name) return alert("Tenant name is required.");
+                                const codeInput = (document.getElementById('ten-code') as HTMLInputElement).value.toUpperCase();
+                                const code = codeInput || name.replace(/\s+/g, '').toUpperCase() + "-" + Math.floor(Math.random()*100);
                                 const id = "tenant-" + Date.now();
                                 const newTenant: HubTenant = {
-                                  id, tenant_name: name,
+                                  id, 
+                                  tenant_name: name,
                                   category: (document.getElementById('ten-cat') as HTMLInputElement).value || "Partner",
-                                  description: (document.getElementById('ten-desc') as HTMLInputElement).value || "Hublet Tenant",
-                                  photos: [(document.getElementById('ten-photo') as HTMLInputElement).value || "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=200&q=80"],
-                                  contact_info: { whatsapp: (document.getElementById('ten-whatsapp') as HTMLInputElement).value },
+                                  description: (document.getElementById('ten-desc') as HTMLTextAreaElement).value || "Hublet Tenant",
+                                  photos: [(document.getElementById('ten-photo') as HTMLInputElement).value || "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?auto=format&fit=crop&w=800&q=80"],
+                                  contact_info: { 
+                                    whatsapp: (document.getElementById('ten-whatsapp') as HTMLInputElement).value,
+                                    phone: (document.getElementById('ten-phone') as HTMLInputElement).value,
+                                    email: (document.getElementById('ten-email') as HTMLInputElement).value
+                                  },
                                   invoicing_enabled: true,
+                                  referral_code: code,
+                                  assigned_by: "manager",
+                                  commission_rate: parseFloat((document.getElementById('ten-comm') as HTMLInputElement).value || "1.0"),
                                   pixel_id: (document.getElementById('ten-pixel') as HTMLInputElement).value,
-                                  referral_code: name.replace(/\s+/g, '').toUpperCase() + "-" + Math.floor(Math.random()*100),
-                                  status: "active", date_added: new Date().toISOString(), referral_entries: 0, discovery_entries: 0
+                                  status: "active", 
+                                  date_added: new Date().toISOString(), 
+                                  referral_entries: 0, 
+                                  discovery_entries: 0
                                 };
                                 await saveHubTenant(newTenant);
+                                // Notify Master
+                                await db.createMasterTenantNotification({
+                                  tenant_id: newTenant.id,
+                                  tenant_name: newTenant.tenant_name,
+                                  referral_code: newTenant.referral_code,
+                                  created_by: "manager",
+                                  acknowledged: false
+                                });
                                 setHubTenants(await fetchHubTenants());
                                 setAddingTenant(false);
-                              }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Save Tenant</button>
+                              }} className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Save Tenant & Notify Master</button>
                               <button onClick={() => setAddingTenant(false)} className="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 py-2 rounded text-white text-[10px] font-bold uppercase tracking-wider">Cancel</button>
                             </div>
                           </div>
                         )}
 
-                        <div className="w-full h-[150px] bg-slate-950 p-2 border border-slate-800 rounded mb-4 overflow-hidden">
+                        {/* Traffic Overview Chart */}
+                        <div className="w-full h-[150px] bg-slate-950 p-2 border border-slate-800 rounded mb-1 overflow-hidden">
                           <h6 className="text-[9px] uppercase text-slate-500 font-bold mb-1">Traffic Insights (Entries)</h6>
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={hubTenants} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
                               <XAxis dataKey="tenant_name" tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                               <YAxis allowDecimals={false} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                               <Tooltip cursor={{ fill: '#1e293b' }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '4px', fontSize: '10px', color: '#f8fafc' }}/>
-                              <Bar dataKey="referral_entries" fill="#10b981" stackId="a" />
-                              <Bar dataKey="discovery_entries" fill="#3b82f6" stackId="a" radius={[2, 2, 0, 0]} />
+                              <Bar dataKey="referral_entries" fill="#10b981" name="Referral (Code)" stackId="a" />
+                              <Bar dataKey="discovery_entries" fill="#3b82f6" name="Discovery (Browse)" stackId="a" radius={[2, 2, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
-                        <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto pr-1">
+
+                        {/* Tenants List */}
+                        <div className="flex flex-col gap-2.5 max-h-[350px] overflow-y-auto pr-1">
                           {hubTenants.map(tenant => (
-                            <div key={tenant.id} className="bg-slate-950 border border-slate-800 p-3 rounded-lg flex flex-col gap-2 relative">
+                            <div key={tenant.id} className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex flex-col gap-2 relative">
                               <div className="flex justify-between items-start">
                                 <div>
                                   <h6 className="font-bold text-xs text-white uppercase flex items-center gap-2">
                                     {tenant.tenant_name}
                                     <span className={`w-2 h-2 rounded-full ${tenant.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                                   </h6>
-                                  <p className="text-[10px] font-mono text-emerald-400">Code: {tenant.referral_code}</p>
+                                  <p className="text-[10px] font-mono text-emerald-400 mt-0.5">
+                                    Code: <strong className="text-white">{tenant.referral_code}</strong> • {tenant.commission_rate ?? 1.0}% Comm
+                                  </p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex gap-1.5">
+                                  <button 
+                                    onClick={() => setSelectedTenantForProducts(tenant)}
+                                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-[10px] font-bold flex items-center gap-1 border border-slate-700"
+                                    title="Manage Products"
+                                  >
+                                    <Box className="w-3 h-3" />
+                                    <span>Products</span>
+                                  </button>
                                   <button onClick={async () => {
                                     const nextStatus = tenant.status === 'active' ? 'inactive' : 'active';
                                     await saveHubTenant({...tenant, status: nextStatus});
                                     setHubTenants(await fetchHubTenants());
-                                  }} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300">
+                                  }} className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded text-slate-300" title="Toggle Active">
                                     <Globe className="w-3.5 h-3.5" />
                                   </button>
                                   <button onClick={async () => {
-                                    if(confirm("Delete this Tenant?")) {
+                                    if(confirm(`Delete tenant ${tenant.tenant_name}?`)) {
                                       await deleteHubTenant(tenant.id);
                                       setHubTenants(await fetchHubTenants());
                                     }
-                                  }} className="p-1.5 bg-red-900/40 hover:bg-red-900/80 rounded text-red-400">
+                                  }} className="p-1.5 bg-red-900/40 hover:bg-red-900/80 rounded text-red-400" title="Delete">
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 uppercase tracking-widest border-t border-slate-800 pt-2 mt-1">
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-0.5">
                                   <span>Referral (📤)</span>
                                   <span className="font-mono text-emerald-400 font-bold bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-900/50 w-fit">{tenant.referral_entries || 0}</span>
                                 </div>
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-0.5">
                                   <span>Discovery (📥)</span>
                                   <span className="font-mono text-blue-400 font-bold bg-blue-950/30 px-2 py-0.5 rounded border border-blue-900/50 w-fit">{tenant.discovery_entries || 0}</span>
                                 </div>
                               </div>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Commission Ledger Section */}
+                        <div className="border-t border-slate-800 pt-3 flex flex-col gap-2.5">
+                          <div className="flex justify-between items-center">
+                            <h5 className="text-xs font-bold text-white uppercase flex items-center gap-1.5">
+                              <DollarSign className="w-3.5 h-3.5 text-amber-400" /> Commission Ledger ({tenantCommissions.length})
+                            </h5>
+                            <button 
+                              onClick={async () => setTenantCommissions(await db.fetchTenantCommissions())}
+                              className="text-[9px] text-slate-400 hover:text-white uppercase font-mono"
+                            >
+                              ↻ Refresh
+                            </button>
+                          </div>
+
+                          {tenantCommissions.length === 0 ? (
+                            <p className="text-[10px] text-slate-500 font-mono text-center py-3 bg-slate-950 rounded-lg border border-slate-800">
+                              No commission entries recorded yet. Commissions auto-generate when a tenant referral code is used on an invoice.
+                            </p>
+                          ) : (
+                            <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                              {tenantCommissions.map(comm => (
+                                <div key={comm.id} className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg flex justify-between items-center text-xs">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-white">{comm.tenant_name || "Tenant"}</span>
+                                      <span className="text-[9px] font-mono text-slate-500">#{comm.invoice_reference}</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                      Sale: ₦{Number(comm.sale_amount).toLocaleString()} @ {comm.commission_rate_applied}% = <strong className="text-emerald-400">₦{Number(comm.commission_amount).toLocaleString()}</strong>
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${comm.status === 'Paid' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : comm.status === 'Reversed' ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                                      {comm.status}
+                                    </span>
+                                    {comm.status === 'Pending' && (
+                                      <button
+                                        onClick={async () => {
+                                          await db.updateCommissionStatus(comm.id, 'Paid');
+                                          setTenantCommissions(await db.fetchTenantCommissions());
+                                        }}
+                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[9px] font-bold uppercase"
+                                      >
+                                        Mark Paid
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -5691,8 +6078,61 @@ Issue: ${escDesc}`;
                                 <option value="Ese">Ese</option>
                               </select>
                             </div>
+                            <div className="col-span-2">
+                              <label className="text-[10px] uppercase font-bold text-slate-300 tracking-widest mb-1 flex items-center justify-between">
+                                <span>Promo Code (Optional) — Tenant Referral ID</span>
+                                {rcpPromoCode && (
+                                  <span className="text-[9px] text-emerald-400 font-mono font-bold">
+                                    {hubTenants.find(t => t.referral_code?.toUpperCase() === rcpPromoCode.trim().toUpperCase())
+                                      ? `✓ CREDITS: ${hubTenants.find(t => t.referral_code?.toUpperCase() === rcpPromoCode.trim().toUpperCase())?.tenant_name} (${hubTenants.find(t => t.referral_code?.toUpperCase() === rcpPromoCode.trim().toUpperCase())?.commission_rate ?? 1.0}%)`
+                                      : "⚠️ Code not found in tenant registry"}
+                                  </span>
+                                )}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="e.g. SHAMASFINDINGS01 or MARTINSQW13"
+                                value={rcpPromoCode}
+                                onChange={e => setRcpPromoCode(e.target.value.toUpperCase())}
+                                className="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded-lg p-2.5 outline-none font-mono uppercase focus:border-emerald-500 tracking-wider"
+                              />
+                            </div>
                           </div>
-                          <button onClick={() => setShowReceipt(true)} className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold uppercase tracking-wider text-xs transition-colors shadow-sm">
+                          <button
+                            onClick={async () => {
+                              if (!rcpCustomerName.trim() || !rcpCustomerPhone.trim()) {
+                                alert("Please enter customer name and phone number.");
+                                return;
+                              }
+                              const saleTotal = (Number(rcpAmount) || 0) + (Number(rcpBalance) || 0);
+                              if (rcpPromoCode.trim()) {
+                                const code = rcpPromoCode.trim().toUpperCase();
+                                const matched = hubTenants.find(t => t.referral_code?.toUpperCase() === code);
+                                if (matched) {
+                                  const rate = matched.commission_rate ?? 1.0;
+                                  const commAmount = (saleTotal * rate) / 100;
+                                  try {
+                                    await db.logTenantCommission({
+                                      tenant_id: matched.id,
+                                      tenant_name: matched.tenant_name,
+                                      invoice_reference: rcpInvoiceNum || receiptNumber || `RCP-${Date.now().toString().slice(-4)}`,
+                                      customer_name: rcpCustomerName,
+                                      sale_amount: saleTotal,
+                                      commission_rate_applied: rate,
+                                      commission_amount: commAmount,
+                                      status: "Pending",
+                                      logged_by_staff: rcpIssuedBy
+                                    });
+                                    setRcpCommissionLogged(`✅ Commission of ₦${commAmount.toLocaleString()} logged for tenant ${matched.tenant_name} (${matched.referral_code}) by ${rcpIssuedBy}!`);
+                                  } catch (err) {
+                                    console.error("Failed to log tenant commission from staff receipt:", err);
+                                  }
+                                }
+                              }
+                              setShowReceipt(true);
+                            }}
+                            className="w-full mt-2 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold uppercase tracking-wider text-xs transition-colors shadow-sm cursor-pointer"
+                          >
                             Generate Receipt
                           </button>
                         </>
@@ -6665,58 +7105,499 @@ Issue: ${escDesc}`;
         </div>
       )}
 
-    {/* Active Tenant Space Modal */}
-      {activeTenantSpace && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-[#0f172a]">
-          <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-emerald-950/20">
-            <div className="flex items-center gap-2">
-              <Store className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-black text-white uppercase tracking-widest text-sm">Tenant Space: {activeTenantSpace.tenant_name}</h3>
+    {/* TENANT CONFIRMATION SCREEN MODAL */}
+      {pendingTenantConfirmation && (
+        <div className="fixed inset-0 z-[2500] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-2 border-emerald-500/40 rounded-2xl w-full max-w-md overflow-hidden shadow-[0_0_35px_rgba(16,185,129,0.25)] flex flex-col">
+            <div className="p-4 border-b border-slate-800 bg-emerald-950/40 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Store className="w-5 h-5 text-emerald-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-300">Tenant Storefront Verification</span>
+              </div>
+              <button 
+                onClick={() => setPendingTenantConfirmation(null)}
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button onClick={() => setActiveTenantSpace(null)} className="text-slate-400 hover:text-white transition-colors p-2 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 bg-[var(--dk)]">
-            <div className="flex flex-col md:flex-row gap-6">
-              <div className="w-full md:w-1/3 aspect-video md:aspect-square bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden flex items-center justify-center">
-                {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 ? (
-                  <img src={activeTenantSpace.photos[0]} alt={activeTenantSpace.tenant_name} className="w-full h-full object-cover" />
+
+            <div className="p-6 flex flex-col items-center text-center gap-4 bg-gradient-to-b from-slate-900 to-slate-950">
+              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-emerald-500/60 shadow-xl bg-slate-800 flex items-center justify-center">
+                {pendingTenantConfirmation.tenant.photos && pendingTenantConfirmation.tenant.photos.length > 0 ? (
+                  <img 
+                    src={pendingTenantConfirmation.tenant.photos[0]} 
+                    alt={pendingTenantConfirmation.tenant.tenant_name} 
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
-                  <Store className="w-16 h-16 text-emerald-900/50" />
+                  <Store className="w-12 h-12 text-emerald-500/70" />
                 )}
               </div>
-              <div className="flex-1 flex flex-col gap-4">
-                <div>
-                  <span className="text-xs px-2 py-1 rounded uppercase font-bold tracking-widest bg-emerald-950/40 text-emerald-400 border border-emerald-800/50">{activeTenantSpace.category}</span>
-                  <h2 className="text-3xl font-black text-white uppercase mt-2">{activeTenantSpace.tenant_name}</h2>
-                </div>
-                <p className="text-slate-400 text-sm leading-relaxed">{activeTenantSpace.description}</p>
-                
-                {activeTenantSpace.contact_info && (
-                  <div className="p-4 bg-slate-900 rounded-xl border border-slate-800 mt-2 flex flex-col gap-2">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-widest border-b border-slate-800 pb-2 mb-1">Contact Information</h4>
-                    {activeTenantSpace.contact_info.email && <p className="text-sm text-slate-300">📧 {activeTenantSpace.contact_info.email}</p>}
-                    {activeTenantSpace.contact_info.phone && <p className="text-sm text-slate-300">📞 {activeTenantSpace.contact_info.phone}</p>}
-                    {activeTenantSpace.contact_info.address && <p className="text-sm text-slate-300">📍 {activeTenantSpace.contact_info.address}</p>}
+
+              <div>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold tracking-widest bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                  {pendingTenantConfirmation.tenant.category}
+                </span>
+                <h3 className="text-2xl font-black text-white uppercase mt-2">
+                  {pendingTenantConfirmation.tenant.tenant_name}
+                </h3>
+                <p className="text-[11px] font-mono text-emerald-400 mt-0.5">
+                  Code: {pendingTenantConfirmation.tenant.referral_code}
+                </p>
+              </div>
+
+              <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-4 w-full text-left">
+                <p className="text-base font-bold text-white text-center tracking-wide mb-1">
+                  Is this who you want to buy from?
+                </p>
+                <p className="text-xs text-slate-400 text-center leading-relaxed">
+                  Confirm to enter this merchant's dedicated storefront with their exclusive products, pricing, and direct WhatsApp contact.
+                </p>
+                {pendingTenantConfirmation.tenant.description && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 line-clamp-3 italic">
+                    "{pendingTenantConfirmation.tenant.description}"
                   </div>
                 )}
-                
-                <div className="mt-auto pt-4 flex gap-3">
-                  <button onClick={() => { setActiveTenantSpace(null); setInStore(true); setCurrentRoom("showroom"); }} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-xs transition-colors shadow-lg shadow-emerald-900/20">
-                    Continue to HiTech Showroom
-                  </button>
-                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 w-full mt-2">
+                <button
+                  onClick={async () => {
+                    const { tenant, source } = pendingTenantConfirmation;
+                    await logTenantTraffic(tenant.id, tenant.referral_code, source);
+                    setActiveTenantSpace(tenant);
+                    setInvoiceTenantCode(tenant.referral_code);
+                    setPendingTenantConfirmation(null);
+                    setShowTenantDirectory(false);
+                    setInStore(true);
+                  }}
+                  className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold uppercase tracking-wider text-xs shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Yes, Enter Space</span>
+                  <span>→</span>
+                </button>
+                <button
+                  onClick={() => setPendingTenantConfirmation(null)}
+                  className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl font-bold uppercase tracking-wider text-xs transition-colors border border-slate-700 cursor-pointer"
+                >
+                  Go Back
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* FULL-SCREEN STANDALONE TENANT MINI-SPACE */}
+      {/* FULL-SCREEN STANDALONE TENANT MINI-SPACE */}
+      {activeTenantSpace && (
+        <div 
+          className="fixed inset-0 z-[2300] w-full h-[100dvh] max-h-[100dvh] overflow-y-scroll overscroll-contain bg-slate-950 text-slate-100 flex flex-col font-sans select-text scroll-smooth"
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+        >
+          {/* Standalone Brand Navigation Header */}
+          <header className="flex-shrink-0 sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-emerald-500 bg-slate-800 flex-shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 ? (
+                  <img src={activeTenantSpace.photos[0]} alt={activeTenantSpace.tenant_name} className="w-full h-full object-cover" />
+                ) : (
+                  <Store className="w-5 h-5 text-emerald-400 absolute inset-0 m-auto" />
+                )}
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-slate-900" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
+                    {activeTenantSpace.tenant_name}
+                  </h1>
+                  <span className="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest hidden sm:inline-block">
+                    Verified Merchant
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-emerald-400 font-medium">
+                    {activeTenantSpace.category}
+                  </span>
+                  <span className="text-[10px] text-slate-500">•</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeTenantSpace.referral_code);
+                      setCopiedTenantCode(true);
+                      setTimeout(() => setCopiedTenantCode(false), 2000);
+                    }}
+                    className="text-[10px] font-mono text-slate-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Click to copy Agent Code"
+                  >
+                    <span>ID: {activeTenantSpace.referral_code}</span>
+                    {copiedTenantCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => {
+                  setActiveTenantSpace(null);
+                  setCurrentRoom("showroom");
+                  setInStore(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-blue-900/60 hover:bg-blue-800 text-blue-200 hover:text-white border border-blue-700/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                title="Visit HiTech Distributors Main Showroom"
+              >
+                <span>🏢 Main Showroom</span>
+              </button>
+              <button
+                onClick={() => {
+                  setTenantSelfServiceInitialTenant(activeTenantSpace);
+                  setShowTenantSelfService(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-emerald-300 border border-emerald-800 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                title="Open Merchant Owner Self-Service Dashboard"
+              >
+                <span>🔑 Merchant Owner</span>
+              </button>
+              <button 
+                onClick={() => {
+                  setActiveTenantSpace(null);
+                  setInStore(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+              >
+                <span>✕ Exit</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Main Scrollable Content */}
+          <main className="w-full max-w-4xl mx-auto px-4 py-6 flex flex-col gap-8 pb-48 flex-grow">
+            
+            {/* Storefront Notification & Quick Navigation */}
+            <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 shadow-sm">
+              <span className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
+                <Store className="w-4 h-4 text-emerald-400" />
+                <span>{activeTenantSpace.tenant_name} Dedicated Storefront</span>
+              </span>
+              <button
+                onClick={() => {
+                  const el = document.getElementById("tenant-products-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/80 px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
+              >
+                <span>Jump to Products</span>
+                <span>↓</span>
+              </button>
+            </div>
+
+            {/* Merchant Bio / Occupant Hero Card */}
+            <section className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl relative">
+              <div className="flex flex-col md:flex-row gap-6 items-start">
+                {/* Photo or Logo */}
+                <div className="w-full md:w-48 aspect-video md:aspect-square rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 shadow-inner flex items-center justify-center">
+                  {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 ? (
+                    <img 
+                      src={activeTenantSpace.photos[0]} 
+                      alt={activeTenantSpace.tenant_name} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <Store className="w-16 h-16 text-emerald-800/40" />
+                  )}
+                </div>
+
+                {/* Details */}
+                <div className="flex-1 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-950/60 text-emerald-400 border border-emerald-800/50 px-2.5 py-1 rounded-md">
+                      {activeTenantSpace.category}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded">
+                      Promo Code: <strong className="text-white">{activeTenantSpace.referral_code}</strong>
+                    </span>
+                  </div>
+
+                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    {activeTenantSpace.tenant_name}
+                  </h2>
+
+                  <div className="text-xs sm:text-sm text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800/60">
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">About This Merchant</h4>
+                    <p>{activeTenantSpace.description}</p>
+                  </div>
+
+                  {/* Contact Badges & Buttons */}
+                  <div className="flex flex-wrap gap-2.5 pt-2">
+                    {activeTenantSpace.contact_info?.whatsapp && (
+                      <a 
+                        href={`https://wa.me/${activeTenantSpace.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${activeTenantSpace.tenant_name}, I'm browsing your storefront on HiTech Distributors.`)}`}
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-colors cursor-pointer"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span>Chat on WhatsApp</span>
+                      </a>
+                    )}
+                    {activeTenantSpace.contact_info?.phone && (
+                      <a 
+                        href={`tel:${activeTenantSpace.contact_info.phone}`}
+                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Call {activeTenantSpace.contact_info.phone}</span>
+                      </a>
+                    )}
+                    {activeTenantSpace.contact_info?.email && (
+                      <a 
+                        href={`mailto:${activeTenantSpace.contact_info.email}?subject=${encodeURIComponent(`Inquiry from HiTech Storefront - ${activeTenantSpace.tenant_name}`)}`}
+                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Mail className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Email</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Photo Gallery: All 30 slots from tenant's photos field */}
+              {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 && (
+                <div className="mt-6 pt-5 border-t border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 text-emerald-400" />
+                      <span>30-Slot Merchant Showcase Gallery</span>
+                    </h4>
+                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
+                      {activeTenantSpace.photos.length} Photo Slots Available
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                    {activeTenantSpace.photos.map((url, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setLightboxPhotoIndex(idx)}
+                        className="group relative aspect-square rounded-lg overflow-hidden border border-slate-800 bg-slate-950 cursor-pointer hover:border-emerald-500/80 transition-all hover:shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                        title={`Click to view Slot #${idx + 1}`}
+                      >
+                        <img
+                          src={url}
+                          alt={`Slot ${idx + 1}`}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1 text-center">
+                          <span className="text-[9px] font-mono text-white font-bold bg-slate-900/90 px-1.5 py-0.5 rounded border border-white/20">
+                            Slot #{idx + 1}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Product Catalog Section */}
+            <section id="tenant-products-section" className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+                    <Store className="w-5 h-5 text-emerald-400" />
+                    <span>Product Catalog & Listings</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Official in-stock items offered directly by {activeTenantSpace.tenant_name}
+                  </p>
+                </div>
+                <div className="text-xs font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-3 py-1 rounded-full w-fit">
+                  {currentTenantProducts.length} {currentTenantProducts.length === 1 ? "Product" : "Products"} Available
+                </div>
+              </div>
+
+              {loadingTenantProducts ? (
+                <div className="py-16 text-center flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+                  <p className="text-xs text-slate-400 font-mono">Loading merchant products...</p>
+                </div>
+              ) : currentTenantProducts.length === 0 ? (
+                <div className="py-12 px-6 rounded-2xl bg-slate-900/60 border border-dashed border-slate-800 text-center flex flex-col items-center gap-3">
+                  <Store className="w-10 h-10 text-slate-700" />
+                  <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider">No Products Currently Listed</h4>
+                  <p className="text-xs text-slate-400 max-w-sm">
+                    Products are being uploaded for {activeTenantSpace.tenant_name}. You can reach out directly via WhatsApp to request catalog details and custom quotes.
+                  </p>
+                  {activeTenantSpace.contact_info?.whatsapp && (
+                    <a 
+                      href={`https://wa.me/${activeTenantSpace.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${activeTenantSpace.tenant_name}, do you have current stock or price lists available?`)}`}
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="mt-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2"
+                    >
+                      <MessageSquare className="w-4 h-4" />
+                      <span>Inquire via WhatsApp</span>
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {currentTenantProducts.map(prod => {
+                    const priceFormatted = (prod.price !== null && prod.price !== undefined && Number(prod.price) > 0)
+                      ? `₦${Number(prod.price).toLocaleString()}`
+                      : "Price on request";
+                    const isPriceOnRequest = priceFormatted === "Price on request";
+
+                    return (
+                      <div 
+                        key={prod.id} 
+                        className="bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-2xl p-4 flex flex-col gap-3 transition-all hover:shadow-[0_4px_20px_rgba(16,185,129,0.1)] group"
+                      >
+                        {/* Photo */}
+                        <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800/80 relative flex items-center justify-center">
+                          {prod.photo_url ? (
+                            <img 
+                              src={prod.photo_url} 
+                              alt={prod.product_name} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <Store className="w-12 h-12 text-slate-800" />
+                          )}
+                          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 backdrop-blur-sm">
+                            In Stock
+                          </span>
+                          {prod.category && (
+                            <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-slate-950/90 text-slate-300 border border-slate-800 backdrop-blur-sm">
+                              {prod.category}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Title & Description */}
+                        <div className="flex-1 flex flex-col gap-1.5">
+                          <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors line-clamp-2">
+                            {prod.product_name}
+                          </h4>
+                          {prod.description && (
+                            <p className="text-xs text-slate-400 line-clamp-3 leading-relaxed">
+                              {prod.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Price & Actions */}
+                        <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-mono">Price</span>
+                            <span className={`font-mono font-bold text-sm ${isPriceOnRequest ? "text-amber-400 italic text-xs" : "text-emerald-400"}`}>
+                              {priceFormatted}
+                            </span>
+                          </div>
+
+                          <div className="flex gap-2">
+                            {activeTenantSpace.contact_info?.whatsapp && (
+                              <a
+                                href={`https://wa.me/${activeTenantSpace.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${activeTenantSpace.tenant_name}, I want to order/inquire about: ${prod.product_name} (${priceFormatted})`)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>Order (WhatsApp)</span>
+                              </a>
+                            )}
+                            {activeTenantSpace.invoicing_enabled && (
+                              <button
+                                onClick={() => {
+                                  const customItem: Product = {
+                                    id: `tenant-${prod.id}`,
+                                    pn: activeTenantSpace.referral_code,
+                                    cat: "tenant",
+                                    n: `${prod.product_name} [${activeTenantSpace.tenant_name}]`,
+                                    brand: activeTenantSpace.tenant_name,
+                                    sp: prod.description || "",
+                                    price: prod.price ? `₦${Number(prod.price).toLocaleString()}` : "CALL",
+                                    desc: prod.description || ""
+                                  };
+                                  addToCart(customItem);
+                                  setInvoiceTenantCode(activeTenantSpace.referral_code);
+                                  setActiveTenantSpace(null);
+                                  setCurrentRoom("invoice");
+                                  setInStore(true);
+                                }}
+                                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 border border-slate-700 transition-colors cursor-pointer"
+                                title="Add to Order & Generate Official Invoice"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-blue-400" />
+                                <span>Invoice</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </main>
+
+          {/* Docked Bottom Actions Bar */}
+          <footer className="fixed bottom-0 left-0 right-0 z-40 p-3 sm:p-4 pointer-events-none">
+            <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 px-4 shadow-[0_10px_35px_rgba(0,0,0,0.8)] pointer-events-auto">
+              <div className="hidden sm:flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs text-slate-300 font-medium">
+                  Browsing <strong className="text-white">{activeTenantSpace.tenant_name}</strong>'s Space
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                {activeTenantSpace.contact_info?.whatsapp && (
+                  <a
+                    href={`https://wa.me/${activeTenantSpace.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi ${activeTenantSpace.tenant_name}, I'm looking at your space on HiTech.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>WhatsApp</span>
+                  </a>
+                )}
+                {activeTenantSpace.invoicing_enabled && (
+                  <button
+                    onClick={() => {
+                      setInvoiceTenantCode(activeTenantSpace.referral_code);
+                      setActiveTenantSpace(null);
+                      setCurrentRoom("invoice");
+                      setInStore(true);
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-blue-400" />
+                    <span>HiTech Invoice</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setActiveTenantSpace(null);
+                    setInStore(true);
+                  }}
+                  className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider border border-slate-800 transition-colors cursor-pointer"
+                >
+                  Exit
+                </button>
+              </div>
+            </div>
+          </footer>
+        </div>
+      )}
+
       {/* Active Ally Modal */}
       {activeAllyModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[2150] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
           <div className="bg-[#0f172a] border border-blue-500/30 rounded-xl w-full max-w-lg overflow-hidden shadow-[0_0_20px_rgba(59,130,246,0.15)] relative">
             <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-blue-950/20">
               <div className="flex items-center gap-2">
@@ -6728,7 +7609,7 @@ Issue: ${escDesc}`;
               </button>
             </div>
             
-            <div className="p-6 bg-[var(--dk2)] flex flex-col items-center text-center gap-4">
+            <div className="p-6 bg-slate-950 flex flex-col items-center text-center gap-4">
               <div className="w-24 h-24 rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden flex items-center justify-center">
                 {activeAllyModal.logo_or_photo ? (
                   <img src={activeAllyModal.logo_or_photo} alt={activeAllyModal.ally_name} className="w-full h-full object-cover" />
@@ -6742,7 +7623,7 @@ Issue: ${escDesc}`;
                 <h2 className="text-xl font-black text-white uppercase mt-3">{activeAllyModal.ally_name}</h2>
               </div>
               
-              <p className="text-sm text-slate-400 leading-relaxed max-w-sm">{activeAllyModal.description}</p>
+              <p className="text-sm text-slate-300 leading-relaxed max-w-sm">{activeAllyModal.description}</p>
               
               {activeAllyModal.external_link && (
                 <a href={activeAllyModal.external_link} target="_blank" rel="noreferrer" className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold uppercase tracking-wider text-xs transition-colors shadow-lg mt-2 flex items-center justify-center gap-2">
@@ -6756,19 +7637,19 @@ Issue: ${escDesc}`;
 
       {/* Ally Directory Modal */}
       {showAllyDirectory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0f172a] border border-blue-500/30 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-[0_0_20px_rgba(59,130,246,0.15)] relative">
+        <div className="fixed inset-0 z-[2100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#0f172a] border border-blue-500/30 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-[0_0_20px_rgba(59,130,246,0.15)] relative">
             <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-blue-950/20">
               <div className="flex items-center gap-2">
                 <Handshake className="w-5 h-5 text-blue-400" />
                 <h3 className="font-black text-white uppercase tracking-widest text-sm">HubAlly Directory</h3>
               </div>
-              <button onClick={() => setShowAllyDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800">
+              <button onClick={() => setShowAllyDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
             
-            <div className="p-4 overflow-y-auto flex-1 bg-[var(--dk2)] flex flex-col gap-3">
+            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
               {hubAllies.length > 0 ? (
                 hubAllies.map(ally => (
                   <div key={ally.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900 flex flex-col sm:flex-row gap-4 items-center sm:items-start group hover:border-blue-500/50 transition-colors">
@@ -6784,7 +7665,7 @@ Issue: ${escDesc}`;
                         <h4 className="font-bold text-white uppercase">{ally.ally_name}</h4>
                         <span className="text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest bg-blue-950/40 text-blue-400 border border-blue-800/50">{ally.business_type}</span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-relaxed max-w-md line-clamp-2">{ally.description}</p>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-md line-clamp-2">{ally.description}</p>
                       
                       <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
                         {ally.external_link && (
@@ -6810,22 +7691,22 @@ Issue: ${escDesc}`;
 
       {/* Tenant Directory Modal */}
       {showTenantDirectory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0f172a] border border-emerald-500/30 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.15)] relative">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-emerald-950/20">
+        <div className="fixed inset-0 z-[2100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="bg-[#0f172a] border border-emerald-500/30 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.15)] relative">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-emerald-950/40">
               <div className="flex items-center gap-2">
                 <Store className="w-5 h-5 text-emerald-400" />
                 <h3 className="font-black text-white uppercase tracking-widest text-sm">HubTenant Directory</h3>
               </div>
-              <button onClick={() => setShowTenantDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800">
+              <button onClick={() => setShowTenantDirectory(false)} className="text-slate-400 hover:text-white transition-colors p-1 bg-slate-900 rounded-full hover:bg-slate-800 border border-slate-800 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
             
-            <div className="p-4 overflow-y-auto flex-1 bg-[var(--dk2)] flex flex-col gap-3">
+            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
               {hubTenants.length > 0 ? (
                 hubTenants.map(tenant => (
-                  <div key={tenant.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900 flex flex-col sm:flex-row gap-4 items-center sm:items-start group hover:border-emerald-500/50 transition-colors">
+                  <div key={tenant.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900 flex flex-col sm:flex-row gap-4 items-center sm:items-start group hover:border-emerald-500/50 transition-colors shadow-sm">
                     <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
                       {tenant.photos && tenant.photos.length > 0 ? (
                         <img src={tenant.photos[0]} alt={tenant.tenant_name} className="w-full h-full object-cover" />
@@ -6834,15 +7715,22 @@ Issue: ${escDesc}`;
                       )}
                     </div>
                     <div className="flex-1 flex flex-col gap-1 text-center sm:text-left">
-                      <div className="flex items-center gap-2 justify-center sm:justify-start">
+                      <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
                         <h4 className="font-bold text-white uppercase">{tenant.tenant_name}</h4>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-widest bg-emerald-950/40 text-emerald-400 border border-emerald-800/50">{tenant.category}</span>
+                        <span className="text-[9px] px-2 py-0.5 rounded-full uppercase font-bold tracking-widest bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">{tenant.category}</span>
+                        <span className="text-[9px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">Code: {tenant.referral_code}</span>
                       </div>
-                      <p className="text-xs text-slate-400 leading-relaxed max-w-md line-clamp-2">{tenant.description}</p>
+                      <p className="text-xs text-slate-300 leading-relaxed max-w-md line-clamp-2 mt-1">{tenant.description}</p>
                       
-                      <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
-                        <button onClick={() => { setShowTenantDirectory(false); setInStore(true); setActiveTenantSpace(tenant); setCurrentRoom("showroom"); }} className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded transition-colors shadow-sm">
-                           Enter Space
+                      <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                        <button 
+                          onClick={() => { 
+                            setPendingTenantConfirmation({ tenant, source: 'discovery' });
+                          }} 
+                          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg transition-colors shadow-sm cursor-pointer"
+                        >
+                          <Store className="w-3.5 h-3.5" />
+                          <span>Enter Space →</span>
                         </button>
                       </div>
                     </div>
