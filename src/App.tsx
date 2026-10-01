@@ -60,7 +60,7 @@ import {
   Edit,
   Moon,
   Users,
-  Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle
+  Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle, Share2, Link
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
@@ -1023,6 +1023,23 @@ export default function App() {
   const [tenantCodeError, setTenantCodeError] = useState("");
   const [showTenantSelfService, setShowTenantSelfService] = useState(false);
   const [tenantSelfServiceInitialTenant, setTenantSelfServiceInitialTenant] = useState<HubTenant | null>(null);
+  const [authenticatedMerchantSession, setAuthenticatedMerchantSession] = useState<HubTenant | null>(null);
+  const [tenantUrlNotice, setTenantUrlNotice] = useState<string>("");
+  const [copiedMainShowroomLink, setCopiedMainShowroomLink] = useState(false);
+  const [copiedStorefrontLink, setCopiedStorefrontLink] = useState(false);
+
+  // Sync authenticated merchant session from sessionStorage when hubTenants are loaded
+  useEffect(() => {
+    try {
+      const savedMerchantId = sessionStorage.getItem("hitech_auth_merchant_id");
+      if (savedMerchantId && hubTenants.length > 0) {
+        const found = hubTenants.find(t => t.id === savedMerchantId);
+        if (found) {
+          setAuthenticatedMerchantSession(found);
+        }
+      }
+    } catch (e) {}
+  }, [hubTenants]);
   const [lightboxPhotoIndex, setLightboxPhotoIndex] = useState<number | null>(null);
   const [rcpPromoCode, setRcpPromoCode] = useState("");
   const [rcpCommissionLogged, setRcpCommissionLogged] = useState<string | null>(null);
@@ -1631,20 +1648,41 @@ export default function App() {
           setHubAllies(allies);
           setHubTenants(tenants);
           
-          // Handle initial URL parameters for referral tracking
+          // Handle initial URL parameters for shareable tenant / ally links (?tenant=CODE, ?ally=CODE, ?ref=CODE)
           const urlParams = new URLSearchParams(window.location.search);
+          const tenantParam = urlParams.get('tenant');
+          const allyParam = urlParams.get('ally');
           const refCode = urlParams.get('ref');
-          if (refCode) {
-            const matchedAlly = allies.find(a => a.referral_code?.toUpperCase() === refCode.toUpperCase());
-            const matchedTenant = findMatchingTenant(tenants, refCode);
-            
+
+          if (tenantParam) {
+            const cleanCode = tenantParam.trim();
+            const matchedTenant = findMatchingTenant(tenants, cleanCode);
+            if (matchedTenant) {
+              // Automatically skip straight to confirmation screen ("Is this who you want to buy from?")
+              setPendingTenantConfirmation({ tenant: matchedTenant, source: 'referral' });
+            } else {
+              // Fail gracefully: show normal landing page with a brief notice, not an error
+              setTenantUrlNotice(`Tenant code "${cleanCode}" was not recognized. Welcome to HiTech Distributors main showroom.`);
+              setTimeout(() => setTenantUrlNotice(""), 7000);
+            }
+          } else if (allyParam) {
+            const cleanAlly = allyParam.trim();
+            const matchedAlly = allies.find(a => a.referral_code?.toUpperCase() === cleanAlly.toUpperCase());
             if (matchedAlly && !sessionStorage.getItem('logged_ally_ref_' + matchedAlly.id)) {
               await logAllyReferral(matchedAlly.id, matchedAlly.referral_code);
               sessionStorage.setItem('logged_ally_ref_' + matchedAlly.id, 'true');
-            } else if (matchedTenant && !sessionStorage.getItem('logged_tenant_ref_' + matchedTenant.id)) {
-              await logTenantTraffic(matchedTenant.id, matchedTenant.referral_code, 'referral');
-              sessionStorage.setItem('logged_tenant_ref_' + matchedTenant.id, 'true');
-              setActiveTenantSpace(matchedTenant);
+            }
+          } else if (refCode) {
+            // Backward-compatible fallback for generic ?ref=
+            const cleanRef = refCode.trim();
+            const matchedTenant = findMatchingTenant(tenants, cleanRef);
+            const matchedAlly = allies.find(a => a.referral_code?.toUpperCase() === cleanRef.toUpperCase());
+
+            if (matchedTenant) {
+              setPendingTenantConfirmation({ tenant: matchedTenant, source: 'referral' });
+            } else if (matchedAlly && !sessionStorage.getItem('logged_ally_ref_' + matchedAlly.id)) {
+              await logAllyReferral(matchedAlly.id, matchedAlly.referral_code);
+              sessionStorage.setItem('logged_ally_ref_' + matchedAlly.id, 'true');
             }
           }
         } catch (e) {
@@ -3104,6 +3142,22 @@ Issue: ${escDesc}`;
                 <span className="text-xs font-serif italic text-black">v.2.40 Beta</span>
               </div>
             </div>
+
+            {/* Graceful Unrecognized Tenant URL Notice */}
+            {tenantUrlNotice && (
+              <div className="mb-4 p-3.5 bg-amber-950/90 border border-amber-600/80 text-amber-200 rounded-xl text-xs flex items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <span className="leading-snug">{tenantUrlNotice}</span>
+                </div>
+                <button 
+                  onClick={() => setTenantUrlNotice("")}
+                  className="p-1 hover:bg-amber-900/60 rounded text-amber-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
             
             <motion.p
               initial={{ y: 15, opacity: 0 }}
@@ -3229,7 +3283,7 @@ Issue: ${escDesc}`;
             </motion.button>
 
             {/* Enter Tenant ID Flow */}
-            <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200">
+            <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200 select-text touch-auto" style={{ touchAction: "manipulation" }}>
               <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                 <Store className="w-4 h-4 text-emerald-400"/> Enter Tenant ID
               </h4>
@@ -3244,7 +3298,7 @@ Issue: ${escDesc}`;
                     setTenantEntryCode(e.target.value.toUpperCase());
                     if (tenantCodeError) setTenantCodeError("");
                   }}
-                  placeholder="e.g. 4444 (Favor's PIN), SHAMASFINDINGS01, MARTINSQW13, or SUMSHI"
+                  placeholder="e.g. SHAMASFINDINGS01, MARTINSQW13, or SUMSHI"
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-500 tracking-wider"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -3256,7 +3310,7 @@ Issue: ${escDesc}`;
                         setTenantEntryCode("");
                         setTenantCodeError("");
                       } else {
-                        setTenantCodeError(`Code or PIN "${code}" not found.`);
+                        setTenantCodeError(`Referral code "${code}" not found.`);
                       }
                     }
                   }}
@@ -3271,7 +3325,7 @@ Issue: ${escDesc}`;
                       setTenantEntryCode("");
                       setTenantCodeError("");
                     } else {
-                      setTenantCodeError(`Code or PIN "${code}" not found.`);
+                      setTenantCodeError(`Referral code "${code}" not found.`);
                     }
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-md flex-shrink-0"
@@ -3296,7 +3350,7 @@ Issue: ${escDesc}`;
                     title={`Click to enter ${t.tenant_name}'s storefront`}
                   >
                     <span>{t.tenant_name.split(" ")[0]}</span>
-                    <span className="text-slate-400 font-normal">{t.pin ? `(PIN: ${t.pin})` : `(${t.referral_code})`}</span>
+                    <span className="text-slate-400 font-normal">({t.referral_code})</span>
                   </button>
                 ))}
               </div>
@@ -3319,7 +3373,7 @@ Issue: ${escDesc}`;
                         }}
                         className="underline text-emerald-400 hover:text-emerald-300 cursor-pointer font-bold"
                       >
-                        {t.tenant_name.split(" ")[0]} {t.pin ? `(PIN: ${t.pin})` : `(${t.referral_code})`}
+                        {t.tenant_name.split(" ")[0]} ({t.referral_code})
                       </button>
                     ))}
                   </div>
@@ -3328,10 +3382,14 @@ Issue: ${escDesc}`;
               <div className="mt-3 pt-2.5 border-t border-slate-800 flex justify-between items-center text-[10px]">
                 <span className="text-slate-400">Rented space owner?</span>
                 <button
-                  onClick={() => setShowTenantSelfService(true)}
+                  onClick={() => {
+                    setTenantSelfServiceInitialTenant(null);
+                    setShowTenantSelfService(true);
+                  }}
                   className="text-emerald-400 hover:text-emerald-300 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <span>Merchant Self-Service (Enter PIN 4444 / Code)</span>
+                  <Lock className="w-3 h-3 text-emerald-400" />
+                  <span>Owner Access (Direct PIN)</span>
                   <span>→</span>
                 </button>
               </div>
@@ -5060,7 +5118,22 @@ Issue: ${escDesc}`;
                   <div className="flex flex-col gap-4">
                     <div className="flex justify-between items-center p-3 bg-slate-900 border border-[var(--border)] rounded-xl">
                       <span className="font-bold text-emerald-400 font-mono text-xs">Logged In: MANAGER</span>
-                      <button onClick={() => {setManagerIsLoggedIn(false); setActiveManagerTab("menu");}} className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase">Logout</button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            const mainUrl = window.location.origin + "/";
+                            navigator.clipboard.writeText(mainUrl);
+                            setCopiedMainShowroomLink(true);
+                            setTimeout(() => setCopiedMainShowroomLink(false), 2500);
+                          }}
+                          className="px-3 py-1.5 bg-blue-900/60 hover:bg-blue-800 text-blue-200 hover:text-white border border-blue-700/80 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                          title="Copy main showroom link to clipboard"
+                        >
+                          <Link className="w-3.5 h-3.5" />
+                          <span>{copiedMainShowroomLink ? "Showroom Link Copied! ✓" : "Copy Main Showroom Link"}</span>
+                        </button>
+                        <button onClick={() => {setManagerIsLoggedIn(false); setActiveManagerTab("menu");}} className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase cursor-pointer">Logout</button>
+                      </div>
                     </div>
 
                     {activeManagerTab === "menu" && (
@@ -5434,6 +5507,18 @@ Issue: ${escDesc}`;
                                   </p>
                                 </div>
                                 <div className="flex gap-1.5">
+                                  <button 
+                                    onClick={() => {
+                                      const tenantUrl = `${window.location.origin}/?tenant=${tenant.referral_code}`;
+                                      navigator.clipboard.writeText(tenantUrl);
+                                      alert(`Copied link for ${tenant.tenant_name}: ${tenantUrl}`);
+                                    }}
+                                    className="px-2 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 rounded text-[10px] font-bold flex items-center gap-1 border border-emerald-800/80 cursor-pointer"
+                                    title="Copy shareable link (?tenant=CODE)"
+                                  >
+                                    <Link className="w-3 h-3 text-emerald-400" />
+                                    <span>Link</span>
+                                  </button>
                                   <button 
                                     onClick={() => setSelectedTenantForProducts(tenant)}
                                     className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-[10px] font-bold flex items-center gap-1 border border-slate-700"
@@ -7206,12 +7291,12 @@ Issue: ${escDesc}`;
       {/* FULL-SCREEN STANDALONE TENANT MINI-SPACE */}
       {activeTenantSpace && (
         <div 
-          className="fixed inset-0 z-[2300] w-full h-[100dvh] max-h-[100dvh] overflow-y-scroll overscroll-contain bg-slate-950 text-slate-100 flex flex-col font-sans select-text scroll-smooth"
-          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+          className="fixed inset-0 z-[2300] w-full h-[100dvh] max-h-[100dvh] overflow-y-scroll overscroll-contain bg-slate-950 text-slate-100 flex flex-col font-sans select-text scroll-smooth touch-auto"
+          style={{ WebkitOverflowScrolling: "touch" }}
         >
           {/* Standalone Brand Navigation Header */}
-          <header className="flex-shrink-0 sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between shadow-xl">
-            <div className="flex items-center gap-3">
+          <header className="flex-shrink-0 sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-xl touch-auto">
+            <div className="flex items-center gap-3 min-w-0">
               <div className="relative w-10 h-10 rounded-full overflow-hidden border-2 border-emerald-500 bg-slate-800 flex-shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
                 {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 ? (
                   <img src={activeTenantSpace.photos[0]} alt={activeTenantSpace.tenant_name} className="w-full h-full object-cover" />
@@ -7220,27 +7305,27 @@ Issue: ${escDesc}`;
                 )}
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-slate-900" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
+                  <h1 className="text-sm sm:text-base font-black text-white uppercase tracking-wider truncate">
                     {activeTenantSpace.tenant_name}
                   </h1>
-                  <span className="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest hidden sm:inline-block">
+                  <span className="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800/80 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest hidden sm:inline-block flex-shrink-0">
                     Verified Merchant
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-emerald-400 font-medium">
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="text-emerald-400 font-medium">
                     {activeTenantSpace.category}
                   </span>
-                  <span className="text-[10px] text-slate-500">•</span>
+                  <span className="text-slate-500">•</span>
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(activeTenantSpace.referral_code);
                       setCopiedTenantCode(true);
                       setTimeout(() => setCopiedTenantCode(false), 2000);
                     }}
-                    className="text-[10px] font-mono text-slate-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                    className="font-mono text-slate-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
                     title="Click to copy Agent Code"
                   >
                     <span>ID: {activeTenantSpace.referral_code}</span>
@@ -7250,34 +7335,97 @@ Issue: ${escDesc}`;
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-none touch-pan-x py-0.5">
+              {/* Share Storefront Link Button */}
+              <button
+                onClick={() => {
+                  const shareUrl = `${window.location.origin}/?tenant=${activeTenantSpace.referral_code}`;
+                  navigator.clipboard.writeText(shareUrl);
+                  setCopiedStorefrontLink(true);
+                  setTimeout(() => setCopiedStorefrontLink(false), 2500);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-900/60 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm flex-shrink-0"
+                title="Copy shareable link (?tenant=CODE)"
+              >
+                {copiedStorefrontLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
+                <span>{copiedStorefrontLink ? "Copied!" : "Share Link"}</span>
+              </button>
+
               <button 
                 onClick={() => {
                   setActiveTenantSpace(null);
                   setCurrentRoom("showroom");
                   setInStore(true);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-blue-900/60 hover:bg-blue-800 text-blue-200 hover:text-white border border-blue-700/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                className="px-3 py-1.5 rounded-xl bg-blue-900/60 hover:bg-blue-800 text-blue-200 hover:text-white border border-blue-700/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm flex-shrink-0"
                 title="Visit HiTech Distributors Main Showroom"
               >
                 <span>🏢 Main Showroom</span>
               </button>
-              <button
-                onClick={() => {
-                  setTenantSelfServiceInitialTenant(activeTenantSpace);
-                  setShowTenantSelfService(true);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-emerald-300 border border-emerald-800 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                title="Open Merchant Owner Self-Service Dashboard"
-              >
-                <span>🔑 {activeTenantSpace.pin ? `Owner Space (PIN: ${activeTenantSpace.pin})` : 'Merchant Owner'}</span>
-              </button>
+
+              {/* Owner Access with Session Isolation */}
+              {authenticatedMerchantSession && authenticatedMerchantSession.id === activeTenantSpace.id ? (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      setTenantSelfServiceInitialTenant(activeTenantSpace);
+                      setShowTenantSelfService(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                    title="Open your verified owner workspace"
+                  >
+                    <Store className="w-3.5 h-3.5" />
+                    <span>⚙️ Manage My Store</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAuthenticatedMerchantSession(null);
+                      sessionStorage.removeItem("hitech_auth_merchant_id");
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    title="Log out of owner mode"
+                  >
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              ) : authenticatedMerchantSession && authenticatedMerchantSession.id !== activeTenantSpace.id ? (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    <span className="hidden sm:inline">Visiting {activeTenantSpace.tenant_name.split(' ')[0]}</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-emerald-400">Signed in as {authenticatedMerchantSession.tenant_name.split(' ')[0]}</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTenantSelfServiceInitialTenant(authenticatedMerchantSession);
+                      setShowTenantSelfService(true);
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-400 border border-emerald-800 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    title="Open your own storefront management space"
+                  >
+                    <span>My Space</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setTenantSelfServiceInitialTenant(activeTenantSpace);
+                    setShowTenantSelfService(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 border border-emerald-900/60 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm flex-shrink-0"
+                  title="Storefront owner? Enter your private 4-digit PIN to edit"
+                >
+                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Owner Access</span>
+                </button>
+              )}
               <button 
                 onClick={() => {
                   setActiveTenantSpace(null);
                   setInStore(true);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm flex-shrink-0"
               >
                 <span>✕ Exit</span>
               </button>
@@ -7795,11 +7943,22 @@ Issue: ${escDesc}`;
         />
       )}
 
-      {/* Tenant Self-Service (My Gallery, My Products, My Earnings) */}
+      {/* Tenant Self-Service (My Gallery, My Products, My Earnings, Settings) */}
       {showTenantSelfService && (
         <TenantSelfService
           initialTenant={tenantSelfServiceInitialTenant}
+          currentSessionTenant={authenticatedMerchantSession}
           onClose={() => {
+            setShowTenantSelfService(false);
+            setTenantSelfServiceInitialTenant(null);
+          }}
+          onAuthenticated={(tenant) => {
+            setAuthenticatedMerchantSession(tenant);
+            sessionStorage.setItem("hitech_auth_merchant_id", tenant.id);
+          }}
+          onLogout={() => {
+            setAuthenticatedMerchantSession(null);
+            sessionStorage.removeItem("hitech_auth_merchant_id");
             setShowTenantSelfService(false);
             setTenantSelfServiceInitialTenant(null);
           }}
@@ -7807,6 +7966,9 @@ Issue: ${escDesc}`;
             setHubTenants(prev => prev.map(t => t.id === updated.id ? updated : t));
             if (activeTenantSpace && activeTenantSpace.id === updated.id) {
               setActiveTenantSpace(updated);
+            }
+            if (authenticatedMerchantSession && authenticatedMerchantSession.id === updated.id) {
+              setAuthenticatedMerchantSession(updated);
             }
           }}
           onOpenStorefront={(tenant) => {
