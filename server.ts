@@ -75,6 +75,132 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
   }
 });
 
+// ==========================================
+// Tenant, Product & Gallery Persistence APIs
+// ==========================================
+const dataDir = path.join(process.cwd(), "data");
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+const tenantsFilePath = path.join(dataDir, "tenants.json");
+const tenantProductsFilePath = path.join(dataDir, "tenant_products.json");
+
+function readJsonFile<T>(filePath: string, fallback: T): T {
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf-8");
+      return JSON.parse(content);
+    }
+  } catch (e) {
+    console.error(`Error reading ${filePath}:`, e);
+  }
+  return fallback;
+}
+
+function writeJsonFile<T>(filePath: string, data: T): void {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (e) {
+    console.error(`Error writing ${filePath}:`, e);
+  }
+}
+
+// API: Get all tenants
+app.get("/api/tenants", (req, res) => {
+  const tenants = readJsonFile<any[]>(tenantsFilePath, []);
+  res.json(tenants);
+});
+
+// API: Save or update tenant (single or array)
+app.post("/api/tenants", (req, res) => {
+  try {
+    const payload = req.body;
+    let tenants = readJsonFile<any[]>(tenantsFilePath, []);
+    
+    if (Array.isArray(payload)) {
+      tenants = payload;
+    } else if (payload && payload.id) {
+      const idx = tenants.findIndex(t => t.id === payload.id);
+      if (idx !== -1) {
+        tenants[idx] = { ...tenants[idx], ...payload };
+      } else {
+        tenants.push(payload);
+      }
+    }
+    
+    writeJsonFile(tenantsFilePath, tenants);
+    res.json({ success: true, count: tenants.length, tenants });
+  } catch (err: any) {
+    console.error("Save tenant error:", err);
+    res.status(500).json({ error: err.message || "Failed to save tenant" });
+  }
+});
+
+// API: Update specific tenant photos (e.g. Favour's 30 gallery slots)
+app.post("/api/tenants/:id/photos", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { photos } = req.body;
+    if (!Array.isArray(photos)) {
+      return res.status(400).json({ error: "Photos array is required" });
+    }
+    let tenants = readJsonFile<any[]>(tenantsFilePath, []);
+    const idx = tenants.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      tenants[idx].photos = photos;
+    } else {
+      tenants.push({ id, photos });
+    }
+    writeJsonFile(tenantsFilePath, tenants);
+    res.json({ success: true, photos });
+  } catch (err: any) {
+    console.error("Save photos error:", err);
+    res.status(500).json({ error: err.message || "Failed to save photos" });
+  }
+});
+
+// API: Tenant products CRUD
+app.get("/api/tenants/:id/products", (req, res) => {
+  const { id } = req.params;
+  const products = readJsonFile<any[]>(tenantProductsFilePath, []);
+  const tenantProds = products.filter(p => p.tenant_id === id);
+  res.json(tenantProds);
+});
+
+app.post("/api/tenants/:id/products", (req, res) => {
+  try {
+    const { id } = req.params;
+    const prod = req.body;
+    if (!prod || !prod.id) {
+      return res.status(400).json({ error: "Product ID and details required" });
+    }
+    prod.tenant_id = id;
+    let products = readJsonFile<any[]>(tenantProductsFilePath, []);
+    const idx = products.findIndex(p => p.id === prod.id);
+    if (idx !== -1) {
+      products[idx] = { ...products[idx], ...prod };
+    } else {
+      products.push(prod);
+    }
+    writeJsonFile(tenantProductsFilePath, products);
+    res.json({ success: true, product: prod });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save product" });
+  }
+});
+
+app.delete("/api/tenants/:id/products/:prodId", (req, res) => {
+  try {
+    const { id, prodId } = req.params;
+    let products = readJsonFile<any[]>(tenantProductsFilePath, []);
+    products = products.filter(p => !(p.tenant_id === id && p.id === prodId));
+    writeJsonFile(tenantProductsFilePath, products);
+    res.json({ success: true, deleted: prodId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to delete product" });
+  }
+});
+
 // Lazy-loaded Gemini AI client to prevent startup crashes if key is missing
 let aiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI {

@@ -3130,7 +3130,7 @@ Issue: ${escDesc}`;
       
       {!inStore ? (
         // 3.3 Landing Page - Editorial Aesthetic
-        <div className="flex flex-col justify-between flex-grow p-6 select-none bg-[var(--dk)]">
+        <div className="flex flex-col justify-between flex-grow p-6 bg-[var(--dk)] touch-auto">
           
           <div className="pt-8">
             <div className="flex justify-between items-center border-b-4 border-[#1a2a4a] pb-4 mb-6">
@@ -3283,7 +3283,7 @@ Issue: ${escDesc}`;
             </motion.button>
 
             {/* Enter Tenant ID Flow */}
-            <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200 select-text touch-auto" style={{ touchAction: "manipulation" }}>
+            <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200 select-text touch-auto">
               <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
                 <Store className="w-4 h-4 text-emerald-400"/> Enter Tenant ID
               </h4>
@@ -3930,11 +3930,22 @@ Issue: ${escDesc}`;
             {currentRoom === "invoice" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4">
                 <Teleprompter text="Welcome to Orders & Invoicing! Review your selected items, generate an invoice, and view payment instructions. Once you pay, staff will issue your official receipt." />
-                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)]">
-                  <h3 className="text-[var(--yl)] font-bold text-base flex items-center gap-2">
-                    <ShoppingCart className="w-5 h-5" /> Orders & Invoicing Desk
-                  </h3>
-                  <p className="text-xs text-[var(--mu)]">Compile custom items, adjust quantities, review pricing, and generate invoices with automatic payment links.</p>
+                <div className="p-4 rounded-xl bg-slate-900 border border-[var(--border)] flex items-center justify-between">
+                  <div>
+                    <h3 className="text-red-500 font-bold text-base flex items-center gap-2" style={{ color: "#ef4444" }}>
+                      <ShoppingCart className="w-5 h-5 text-red-500" /> 
+                      <span className="text-red-500 font-bold">HiTech Invoice & Orders Desk</span>
+                    </h3>
+                    <p className="text-xs text-[var(--mu)]">Compile custom items, adjust quantities, review pricing, and generate invoices with automatic payment links.</p>
+                  </div>
+                  <button
+                    onClick={() => setCurrentRoom("showroom")}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-red-500 hover:text-red-400 border border-red-900/60 text-xs font-bold uppercase rounded-lg transition-colors cursor-pointer flex-shrink-0"
+                    style={{ color: "#ef4444" }}
+                    title="Exit out to showroom"
+                  >
+                    Exit / Out
+                  </button>
                 </div>
 
                 {cart.length === 0 ? (
@@ -4022,7 +4033,20 @@ Issue: ${escDesc}`;
                         <div>
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
                             <span>Tenant / Agent Referral Code (Optional)</span>
-                            {invoiceTenantCode && <span className="text-emerald-600 font-mono text-[9px] font-bold">✓ APPLIED: {invoiceTenantCode}</span>}
+                            {invoiceTenantCode && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-emerald-600 font-mono text-[9px] font-bold">✓ APPLIED: {invoiceTenantCode}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setInvoiceTenantCode("")}
+                                  className="text-[10px] font-bold uppercase text-red-500 hover:text-red-400 underline cursor-pointer"
+                                  style={{ color: "#ef4444" }}
+                                  title="Change or remove applied code"
+                                >
+                                  Change / Out
+                                </button>
+                              </div>
+                            )}
                           </label>
                           <input
                             type="text"
@@ -4034,9 +4058,10 @@ Issue: ${escDesc}`;
                         </div>
                         <button
                           onClick={handleGenerateInvoice}
-                          className="w-full py-3 mt-2 bg-[#1a73e8] hover:bg-[#2b85e4] text-white rounded font-bold uppercase tracking-wider text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                          className="w-full py-3 mt-2 bg-red-600 hover:bg-red-700 text-white rounded font-bold uppercase tracking-wider text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                         >
-                          <FileText className="w-4 h-4" /> Generate Invoice
+                          <FileText className="w-4 h-4 text-white" /> 
+                          <span className="font-bold">Generate HiTech Invoice</span>
                         </button>
                       </div>
                     ) : (
@@ -4048,7 +4073,10 @@ Issue: ${escDesc}`;
                         
                         <div className="bg-white border-2 border-[#1a1a2e] rounded shadow-md overflow-hidden font-mono text-[#1a1a2e] text-xs">
                           <div className="p-4 flex flex-col gap-1 text-center border-b-2 border-dashed border-[#1a1a2e] bg-slate-50">
-                            <h2 className="font-bold text-base text-[#1a73e8] flex items-center justify-center gap-1"><span className="w-3 h-3 rounded-full bg-[#1a73e8] inline-block"></span> HITECH DISTRIBUTORS</h2>
+                            <h2 className="font-bold text-base text-red-600 flex items-center justify-center gap-1" style={{ color: "#dc2626" }}>
+                              <span className="w-3 h-3 rounded-full bg-red-600 inline-block"></span> 
+                              HITECH DISTRIBUTORS — INVOICE
+                            </h2>
                             <p>Computers · Office Equipment · Solar Sizing Hub</p>
                             <p>6 Airport Road, Warri · Delta State, Nigeria</p>
                           </div>
@@ -4451,15 +4479,22 @@ Issue: ${escDesc}`;
                 <div className="flex-grow bg-slate-950 rounded-xl border border-slate-800 p-3 overflow-y-auto flex flex-col gap-3 h-[300px]">
                   {chatMessages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`p-2.5 rounded-xl max-w-[85%] text-xs leading-relaxed ${msg.sender === "user" ? "bg-[var(--bl2)] text-white" : "bg-white text-[#1a1a2e] border border-slate-800"}`}>
+                      <div 
+                        className={`p-2.5 rounded-xl max-w-[85%] text-xs leading-relaxed ${
+                          msg.sender === "user" 
+                            ? "bg-[var(--bl2)] text-white" 
+                            : "bg-white text-red-600 font-semibold border border-red-200 shadow-sm"
+                        }`}
+                        style={msg.sender !== "user" ? { color: "#dc2626" } : undefined}
+                      >
                         {msg.text}
                       </div>
                     </div>
                   ))}
                   {chatLoading && (
                     <div className="flex justify-start">
-                      <div className="p-2.5 rounded-xl bg-white border border-slate-800 flex items-center gap-1 text-[10px] text-[#1a1a2e]">
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Thinking...
+                      <div className="p-2.5 rounded-xl bg-white border border-red-200 flex items-center gap-1 text-[10px] text-red-600 font-bold" style={{ color: "#dc2626" }}>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-red-600" /> Thinking...
                       </div>
                     </div>
                   )}
@@ -7234,14 +7269,14 @@ Issue: ${escDesc}`;
               </div>
 
               <div>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold tracking-widest bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full uppercase font-bold tracking-widest bg-emerald-950 text-white border border-emerald-500/60 shadow-sm">
                   {pendingTenantConfirmation.tenant.category}
                 </span>
                 <h3 className="text-2xl font-black text-white uppercase mt-2">
                   {pendingTenantConfirmation.tenant.tenant_name}
                 </h3>
-                <p className="text-[11px] font-mono text-emerald-400 mt-0.5">
-                  Code: {pendingTenantConfirmation.tenant.referral_code}
+                <p className="text-[11px] font-mono text-white mt-1 font-bold">
+                  Code: <span className="text-white underline">{pendingTenantConfirmation.tenant.referral_code}</span>
                 </p>
               </div>
 
@@ -7249,11 +7284,11 @@ Issue: ${escDesc}`;
                 <p className="text-base font-bold text-white text-center tracking-wide mb-1">
                   Is this who you want to buy from?
                 </p>
-                <p className="text-xs text-slate-400 text-center leading-relaxed">
+                <p className="text-xs text-white/90 text-center leading-relaxed">
                   Confirm to enter this merchant's dedicated storefront with their exclusive products, pricing, and direct WhatsApp contact.
                 </p>
                 {pendingTenantConfirmation.tenant.description && (
-                  <div className="mt-3 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 line-clamp-3 italic">
+                  <div className="mt-3 pt-3 border-t border-slate-800/80 text-xs text-white line-clamp-3 italic">
                     "{pendingTenantConfirmation.tenant.description}"
                   </div>
                 )}
@@ -7315,27 +7350,27 @@ Issue: ${escDesc}`;
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px]">
-                  <span className="text-emerald-400 font-medium">
+                  <span className="text-white font-semibold">
                     {activeTenantSpace.category}
                   </span>
-                  <span className="text-slate-500">•</span>
+                  <span className="text-slate-400">•</span>
                   <button 
                     onClick={() => {
                       navigator.clipboard.writeText(activeTenantSpace.referral_code);
                       setCopiedTenantCode(true);
                       setTimeout(() => setCopiedTenantCode(false), 2000);
                     }}
-                    className="font-mono text-slate-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
+                    className="font-mono text-white hover:text-emerald-300 flex items-center gap-1 cursor-pointer transition-colors"
                     title="Click to copy Agent Code"
                   >
-                    <span>ID: {activeTenantSpace.referral_code}</span>
-                    {copiedTenantCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>ID: <strong className="text-white font-bold">{activeTenantSpace.referral_code}</strong></span>
+                    {copiedTenantCode ? <Check className="w-3 h-3 text-white" /> : <Copy className="w-3 h-3 text-white" />}
                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-none touch-pan-x py-0.5">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-x-auto scrollbar-none touch-auto py-0.5">
               {/* Share Storefront Link Button */}
               <button
                 onClick={() => {
@@ -7382,8 +7417,9 @@ Issue: ${escDesc}`;
                       setAuthenticatedMerchantSession(null);
                       sessionStorage.removeItem("hitech_auth_merchant_id");
                     }}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-red-500 hover:text-red-400 border border-red-900/60 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
                     title="Log out of owner mode"
+                    style={{ color: "#ef4444" }}
                   >
                     <span>Log Out</span>
                   </button>
@@ -7396,6 +7432,17 @@ Issue: ${escDesc}`;
                     <span className="text-slate-500">•</span>
                     <span className="text-emerald-400">Signed in as {authenticatedMerchantSession.tenant_name.split(' ')[0]}</span>
                   </div>
+                  <button
+                    onClick={() => {
+                      setAuthenticatedMerchantSession(null);
+                      sessionStorage.removeItem("hitech_auth_merchant_id");
+                    }}
+                    className="px-2 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-red-500 hover:text-red-400 border border-red-900/60 text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                    title="Change / Log Out from current account"
+                    style={{ color: "#ef4444" }}
+                  >
+                    <span>Change / Out</span>
+                  </button>
                   <button
                     onClick={() => {
                       setTenantSelfServiceInitialTenant(authenticatedMerchantSession);
@@ -7425,9 +7472,11 @@ Issue: ${escDesc}`;
                   setActiveTenantSpace(null);
                   setInStore(true);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm flex-shrink-0"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-red-500 hover:text-red-400 border border-red-900/60 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer shadow-sm flex-shrink-0"
+                style={{ color: "#ef4444" }}
+                title="Exit out of storefront"
               >
-                <span>✕ Exit</span>
+                <span>✕ Exit / Out</span>
               </button>
             </div>
           </header>
@@ -7436,17 +7485,18 @@ Issue: ${escDesc}`;
           <main className="w-full max-w-4xl mx-auto px-4 py-6 flex flex-col gap-8 pb-48 flex-grow">
             
             {/* Storefront Notification & Quick Navigation */}
-            <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 shadow-sm">
-              <span className="text-xs text-slate-300 font-semibold flex items-center gap-1.5">
-                <Store className="w-4 h-4 text-emerald-400" />
-                <span>{activeTenantSpace.tenant_name} Dedicated Storefront</span>
+            <div className="flex items-center justify-between bg-slate-900/90 border border-red-900/40 rounded-xl px-4 py-2.5 shadow-sm">
+              <span className="text-xs font-bold flex items-center gap-1.5 text-red-500" style={{ color: "#ef4444" }}>
+                <Store className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span>Locate her in {activeTenantSpace.tenant_name} Dedicated Storefront</span>
               </span>
               <button
                 onClick={() => {
                   const el = document.getElementById("tenant-products-section");
                   if (el) el.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/80 px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
+                className="text-[11px] font-bold text-red-500 hover:text-red-400 flex items-center gap-1 bg-red-950/80 border border-red-800/80 px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
+                style={{ color: "#ef4444" }}
               >
                 <span>Jump to Products</span>
                 <span>↓</span>
@@ -7472,11 +7522,11 @@ Issue: ${escDesc}`;
                 {/* Details */}
                 <div className="flex-1 flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-950/60 text-emerald-400 border border-emerald-800/50 px-2.5 py-1 rounded-md">
+                    <span className="text-[10px] uppercase font-bold tracking-widest bg-emerald-950/80 text-white border border-emerald-500/60 px-2.5 py-1 rounded-md shadow-sm">
                       {activeTenantSpace.category}
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 border border-slate-800 px-2 py-1 rounded">
-                      Promo Code: <strong className="text-white">{activeTenantSpace.referral_code}</strong>
+                    <span className="text-[10px] font-mono text-white bg-slate-900 border border-slate-700 px-2 py-1 rounded shadow-sm">
+                      Promo Code: <strong className="text-white font-black">{activeTenantSpace.referral_code}</strong>
                     </span>
                   </div>
 
@@ -7484,9 +7534,12 @@ Issue: ${escDesc}`;
                     {activeTenantSpace.tenant_name}
                   </h2>
 
-                  <div className="text-xs sm:text-sm text-slate-300 leading-relaxed bg-slate-950/50 p-4 rounded-xl border border-slate-800/60">
-                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">About This Merchant</h4>
-                    <p>{activeTenantSpace.description}</p>
+                  <div className="text-xs sm:text-sm text-white leading-relaxed bg-slate-950/80 p-4 rounded-xl border border-slate-800 shadow-inner">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-white mb-2 flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-white" />
+                      <span>About This Merchant</span>
+                    </h4>
+                    <p className="text-white text-xs sm:text-sm leading-relaxed font-normal">{activeTenantSpace.description}</p>
                   </div>
 
                   {/* Contact Badges & Buttons */}
@@ -7498,26 +7551,26 @@ Issue: ${escDesc}`;
                         rel="noreferrer"
                         className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-colors cursor-pointer"
                       >
-                        <MessageSquare className="w-4 h-4" />
-                        <span>Chat on WhatsApp</span>
+                        <MessageSquare className="w-4 h-4 text-white" />
+                        <span className="text-white font-bold">Chat on WhatsApp</span>
                       </a>
                     )}
                     {activeTenantSpace.contact_info?.phone && (
                       <a 
                         href={`tel:${activeTenantSpace.contact_info.phone}`}
-                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                        className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer shadow-sm"
                       >
-                        <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Call {activeTenantSpace.contact_info.phone}</span>
+                        <Phone className="w-3.5 h-3.5 text-white" />
+                        <span className="text-white font-bold">Call {activeTenantSpace.contact_info.phone}</span>
                       </a>
                     )}
                     {activeTenantSpace.contact_info?.email && (
                       <a 
                         href={`mailto:${activeTenantSpace.contact_info.email}?subject=${encodeURIComponent(`Inquiry from HiTech Storefront - ${activeTenantSpace.tenant_name}`)}`}
-                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer"
+                        className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border border-slate-700 transition-colors cursor-pointer shadow-sm"
                       >
-                        <Mail className="w-3.5 h-3.5 text-blue-400" />
-                        <span>Email</span>
+                        <Mail className="w-3.5 h-3.5 text-white" />
+                        <span className="text-white font-bold">Email</span>
                       </a>
                     )}
                   </div>
@@ -7528,11 +7581,11 @@ Issue: ${escDesc}`;
               {activeTenantSpace.photos && activeTenantSpace.photos.length > 0 && (
                 <div className="mt-6 pt-5 border-t border-slate-800">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-slate-300 flex items-center gap-1.5">
-                      <Camera className="w-4 h-4 text-emerald-400" />
-                      <span>30-Slot Merchant Showcase Gallery</span>
+                    <h4 className="text-xs font-black uppercase tracking-widest text-white flex items-center gap-1.5">
+                      <Camera className="w-4 h-4 text-white" />
+                      <span className="text-white">30-Slot Merchant Showcase Gallery</span>
                     </h4>
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-0.5 rounded">
+                    <span className="text-[10px] font-mono font-bold text-white bg-slate-900 border border-slate-700 px-2.5 py-0.5 rounded shadow-sm">
                       {activeTenantSpace.photos.length} Photo Slots Available
                     </span>
                   </div>
@@ -7735,10 +7788,11 @@ Issue: ${escDesc}`;
                       setCurrentRoom("invoice");
                       setInStore(true);
                     }}
-                    className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-red-500 hover:text-red-400 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-red-800/80 transition-colors cursor-pointer shadow-md"
+                    style={{ color: "#ef4444" }}
                   >
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    <span>HiTech Invoice</span>
+                    <FileText className="w-4 h-4 text-red-500" />
+                    <span className="text-red-500 font-bold">HiTech Invoice</span>
                   </button>
                 )}
                 <button
@@ -7746,9 +7800,11 @@ Issue: ${escDesc}`;
                     setActiveTenantSpace(null);
                     setInStore(true);
                   }}
-                  className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider border border-slate-800 transition-colors cursor-pointer"
+                  className="px-4 py-2.5 bg-slate-950 hover:bg-slate-800 text-red-500 hover:text-red-400 rounded-xl text-xs font-bold uppercase tracking-wider border border-red-900/60 transition-colors cursor-pointer"
+                  style={{ color: "#ef4444" }}
+                  title="Exit out to main showroom"
                 >
-                  Exit
+                  <span className="text-red-500 font-bold">Exit / Out</span>
                 </button>
               </div>
             </div>
@@ -7810,7 +7866,7 @@ Issue: ${escDesc}`;
               </button>
             </div>
             
-            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
+            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch" }}>
               {hubAllies.length > 0 ? (
                 hubAllies.map(ally => (
                   <div key={ally.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900 flex flex-col sm:flex-row gap-4 items-center sm:items-start group hover:border-blue-500/50 transition-colors">
@@ -7877,7 +7933,7 @@ Issue: ${escDesc}`;
               </div>
             </div>
             
-            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}>
+            <div className="p-4 overflow-y-auto overscroll-contain flex-1 bg-slate-950 flex flex-col gap-3" style={{ WebkitOverflowScrolling: "touch" }}>
               {hubTenants.length > 0 ? (
                 hubTenants.map(tenant => (
                   <div key={tenant.id} className="p-4 rounded-xl border border-slate-800 bg-slate-900 flex flex-col sm:flex-row gap-4 items-center sm:items-start group hover:border-emerald-500/50 transition-colors shadow-sm">

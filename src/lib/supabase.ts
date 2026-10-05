@@ -23,8 +23,36 @@ export async function base64ToBlob(base64: string): Promise<Blob> {
   return await res.blob();
 }
 
-// Upload file to 'hitech-images' public bucket with resilient optimized data URL fallback
+// Upload file to server '/api/upload' or 'hitech-images' public bucket with resilient optimized data URL fallback
 export async function uploadToSupabaseStorage(fileOrBlob: File | Blob, originalName?: string): Promise<string> {
+  // 1. Direct Server Endpoint Upload (Stores in /uploads/ or Vercel Blob)
+  try {
+    const formData = new FormData();
+    if (fileOrBlob instanceof File) {
+      formData.append("file", fileOrBlob);
+    } else {
+      formData.append("file", fileOrBlob, originalName || `upload-${Date.now()}.jpg`);
+    }
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: formData
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.url) {
+        const fullUrl = data.url.startsWith("http") || data.url.startsWith("data:") 
+          ? data.url 
+          : `${typeof window !== "undefined" ? window.location.origin : ""}${data.url}`;
+        return fullUrl;
+      }
+    }
+  } catch (err) {
+    console.warn("Direct /api/upload failed, trying Supabase storage fallback:", err);
+  }
+
+  // 2. Supabase Storage Upload (if configured)
   try {
     let ext = "jpg";
     if (fileOrBlob instanceof File) {
@@ -54,7 +82,7 @@ export async function uploadToSupabaseStorage(fileOrBlob: File | Blob, originalN
     console.warn("Supabase storage upload fallback triggered:", err);
   }
 
-  // Resilient fallback: Convert to compressed Data URL
+  // Resilient fallback: Convert to compressed Data URL (compact 800px max)
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -1158,13 +1186,49 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
     }
   } catch (e) {}
 
+  // Read server and local fallback caches
+  let serverTenants: any[] = [];
+  try {
+    const res = await fetch("/api/tenants");
+    if (res.ok) {
+      serverTenants = await res.json();
+    }
+  } catch (e) {}
+
+  const fallback = ((await readFallback("hublet_tenants_fallback")) as HubTenant[]) || [];
+
   if (list.length === 0) {
-    const fallback = (await readFallback("hublet_tenants_fallback")) as HubTenant[];
-    if (fallback && Array.isArray(fallback) && fallback.length > 0) {
+    if (serverTenants && serverTenants.length > 0) {
+      list = serverTenants;
+    } else if (fallback && fallback.length > 0) {
       list = fallback;
     } else {
       list = [...DEFAULT_INITIAL_TENANTS];
     }
+  } else {
+    // If Supabase returned rows, merge any custom non-mockup photos from server/fallback so they never revert
+    list = list.map(supaTenant => {
+      const matchServer = serverTenants.find((s: any) => s.id === supaTenant.id);
+      const matchFallback = fallback.find(f => f.id === supaTenant.id);
+      const cachedPhotos = matchServer?.photos || matchFallback?.photos;
+
+      let mergedPhotos = ensure30PhotoSlots(supaTenant.photos);
+      if (Array.isArray(cachedPhotos) && cachedPhotos.length > 0) {
+        mergedPhotos = mergedPhotos.map((photo, idx) => {
+          const isMockup = photo === DEFAULT_30_SLOT_MOCKUPS[idx];
+          const cachedPhoto = cachedPhotos[idx];
+          if (isMockup && cachedPhoto && cachedPhoto !== DEFAULT_30_SLOT_MOCKUPS[idx] && typeof cachedPhoto === "string" && cachedPhoto.trim() !== "") {
+            return cachedPhoto;
+          }
+          return photo;
+        });
+      }
+
+      return {
+        ...supaTenant,
+        photos: mergedPhotos
+      };
+    });
   }
 
   // Guarantee that all 3 official initial tenants (Martins, Shama's Findings, Sumshi) are always present
@@ -1241,10 +1305,55 @@ export async function saveHubTenant(tenant: HubTenant) {
     console.warn("Failed to write to fallback cache:", e);
   }
 
-  // 2. Persist to Supabase database
+  // 2. Persist to server endpoints /api/tenants and /api/tenants/:id/photos
   try {
-    await supabase.from("hublet_tenants").upsert(sanitizedTenant);
+    await fetch(`/api/tenants/${sanitizedTenant.id}/photos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ photos: sanitizedTenant.photos })
+    });
   } catch (e) {}
+
+  try {
+    await fetch("/api/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sanitizedTenant)
+    });
+  } catch (e) {}
+
+  // 3. Persist to Supabase database (filtering strictly to valid columns of hublet_tenants schema)
+  try {
+    const dbPayload = {
+      id: sanitizedTenant.id,
+      tenant_name: sanitizedTenant.tenant_name,
+      category: sanitizedTenant.category,
+      description: sanitizedTenant.description,
+      photos: sanitizedTenant.photos,
+      contact_info: sanitizedTenant.contact_info,
+      invoicing_enabled: sanitizedTenant.invoicing_enabled,
+      referral_code: sanitizedTenant.referral_code,
+      assigned_by: sanitizedTenant.assigned_by,
+      commission_rate: sanitizedTenant.commission_rate,
+      pixel_id: sanitizedTenant.pixel_id,
+      status: sanitizedTenant.status,
+      date_added: sanitizedTenant.date_added
+    };
+
+    const { error: upsertErr } = await supabase.from("hublet_tenants").upsert(dbPayload);
+    if (upsertErr) {
+      console.warn("Supabase upsert failed, attempting direct update of photos column:", upsertErr);
+      const { error: updateErr } = await supabase
+        .from("hublet_tenants")
+        .update({ photos: sanitizedTenant.photos })
+        .eq("id", sanitizedTenant.id);
+      if (updateErr) {
+        console.error("Direct update of photos failed:", updateErr);
+      }
+    }
+  } catch (e) {
+    console.warn("Supabase saveHubTenant error:", e);
+  }
 }
 
 export async function deleteHubTenant(id: string) {
