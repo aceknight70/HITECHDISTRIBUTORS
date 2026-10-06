@@ -7485,21 +7485,21 @@ Issue: ${escDesc}`;
           <main className="w-full max-w-4xl mx-auto px-4 py-6 flex flex-col gap-8 pb-48 flex-grow">
             
             {/* Storefront Notification & Quick Navigation */}
-            <div className="flex items-center justify-between bg-slate-900/90 border border-red-900/40 rounded-xl px-4 py-2.5 shadow-sm">
-              <span className="text-xs font-bold flex items-center gap-1.5 text-red-500" style={{ color: "#ef4444" }}>
-                <Store className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <span>Locate her in {activeTenantSpace.tenant_name} Dedicated Storefront</span>
+            <div className="flex items-center justify-between bg-slate-900/90 border border-blue-900/60 rounded-xl px-4 py-2.5 shadow-sm">
+              <span className="text-xs font-black flex items-center gap-1.5 text-biro-blue" style={{ color: "#0052cc" }}>
+                <Store className="w-4 h-4 flex-shrink-0" style={{ color: "#0052cc" }} />
+                <span style={{ color: "#0052cc" }}>Locate her in {activeTenantSpace.tenant_name} Dedicated Storefront</span>
               </span>
               <button
                 onClick={() => {
                   const el = document.getElementById("tenant-products-section");
                   if (el) el.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="text-[11px] font-bold text-red-500 hover:text-red-400 flex items-center gap-1 bg-red-950/80 border border-red-800/80 px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm"
-                style={{ color: "#ef4444" }}
+                className="text-[11px] font-black flex items-center gap-1 bg-blue-950/90 border border-blue-600/80 px-3 py-1 rounded-lg cursor-pointer transition-colors shadow-sm hover:bg-blue-900/90"
+                style={{ color: "#0052cc" }}
               >
-                <span>Jump to Products</span>
-                <span>↓</span>
+                <span style={{ color: "#0052cc" }}>Jump to Products</span>
+                <span style={{ color: "#0052cc" }}>↓</span>
               </button>
             </div>
 

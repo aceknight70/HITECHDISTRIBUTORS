@@ -581,7 +581,8 @@ export default function TenantSelfService({
                     setLoginError("");
                   }}
                   disabled={lockoutRemainingSecs > 0}
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs font-mono text-white outline-none cursor-pointer disabled:opacity-50"
+                  className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-900 outline-none cursor-pointer disabled:opacity-50 shadow-sm"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                 >
                   <option value="">-- Any Registered Storefront (Match by PIN) --</option>
                   {allTenantsList.filter(t => t.status === 'active').map(t => (
@@ -612,14 +613,15 @@ export default function TenantSelfService({
                   disabled={lockoutRemainingSecs > 0}
                   placeholder="Enter 4-digit PIN"
                   maxLength={10}
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3.5 py-3 pr-10 text-sm font-mono text-white tracking-widest outline-none placeholder:text-slate-600 placeholder:tracking-normal disabled:opacity-50"
+                  className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-3 pr-10 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none placeholder:text-slate-500 placeholder:tracking-normal disabled:opacity-50 shadow-sm"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                   autoFocus
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
                   disabled={lockoutRemainingSecs > 0}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 cursor-pointer p-1"
                   title={showPin ? "Hide PIN" : "Show PIN"}
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -1090,7 +1092,8 @@ export default function TenantSelfService({
                       value={slotPhotoUrlInput}
                       onChange={e => setSlotPhotoUrlInput(e.target.value)}
                       placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-emerald-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
@@ -1174,7 +1177,7 @@ export default function TenantSelfService({
 
                 <form onSubmit={handleSaveProduct} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Product Name *
                     </label>
                     <input
@@ -1183,12 +1186,13 @@ export default function TenantSelfService({
                       value={productForm.product_name}
                       onChange={e => setProductForm({ ...productForm, product_name: e.target.value })}
                       placeholder="e.g. The Stain Rectifier (500ml) or 5kVA Solar Inverter"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Price (₦) — Leave blank for "Price on request"
                     </label>
                     <input
@@ -1196,12 +1200,13 @@ export default function TenantSelfService({
                       value={productForm.price}
                       onChange={e => setProductForm({ ...productForm, price: e.target.value })}
                       placeholder="e.g. 4500 (blank = Price on request)"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono outline-none focus:border-emerald-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Category
                     </label>
                     <input
@@ -1209,12 +1214,13 @@ export default function TenantSelfService({
                       value={productForm.category}
                       onChange={e => setProductForm({ ...productForm, category: e.target.value })}
                       placeholder="e.g. Cleaning, Fashion, Food, Solar"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Product Photo URL
                     </label>
                     <div className="flex gap-2">
@@ -1223,7 +1229,8 @@ export default function TenantSelfService({
                         value={productForm.photo_url}
                         onChange={e => setProductForm({ ...productForm, photo_url: e.target.value })}
                         placeholder="https://images.unsplash.com/..."
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-emerald-500"
+                        className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                       />
                       <label className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer">
                         <Upload className="w-3.5 h-3.5" />
@@ -1249,7 +1256,7 @@ export default function TenantSelfService({
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Description & Specs
                     </label>
                     <textarea
@@ -1257,7 +1264,8 @@ export default function TenantSelfService({
                       value={productForm.description}
                       onChange={e => setProductForm({ ...productForm, description: e.target.value })}
                       placeholder="Describe what makes this item special, sizes, specs, and details..."
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-emerald-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
@@ -1553,18 +1561,19 @@ export default function TenantSelfService({
                         value={profileForm.pin}
                         onChange={e => setProfileForm({ ...profileForm, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         placeholder="Enter 4-digit PIN"
-                        className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-white tracking-widest outline-none pr-10"
+                        className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none pr-10 shadow-sm placeholder:text-slate-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                       />
                       <button
                         type="button"
                         onClick={() => setShowCurrentPin(!showCurrentPin)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
                         title={showCurrentPin ? "Hide PIN" : "Show PIN"}
                       >
                         {showCurrentPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    <span className="text-[11px] text-slate-400 font-mono">
+                    <span className="text-[11px] text-slate-300 font-mono">
                       Your Referral Code: <strong className="text-emerald-400">{authenticatedTenant.referral_code}</strong>
                     </span>
                   </div>
@@ -1573,76 +1582,83 @@ export default function TenantSelfService({
                 {/* Profile Fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Storefront Name *</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">Storefront Name *</label>
                     <input
                       type="text"
                       value={profileForm.tenant_name}
                       onChange={e => setProfileForm({ ...profileForm, tenant_name: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Category / Specialty</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">Category / Specialty</label>
                     <input
                       type="text"
                       value={profileForm.category}
                       onChange={e => setProfileForm({ ...profileForm, category: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div className="sm:col-span-2">
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">About / Bio</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">About / Bio</label>
                     <textarea
                       rows={3}
                       value={profileForm.description}
                       onChange={e => setProfileForm({ ...profileForm, description: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none leading-relaxed"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none leading-relaxed shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">WhatsApp (Customer Inquiries)</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">WhatsApp (Customer Inquiries)</label>
                     <input
                       type="text"
                       value={profileForm.whatsapp}
                       onChange={e => setProfileForm({ ...profileForm, whatsapp: e.target.value })}
                       placeholder="e.g. +234..."
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Phone Number</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">Phone Number</label>
                     <input
                       type="text"
                       value={profileForm.phone}
                       onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })}
                       placeholder="e.g. +234..."
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Email (Optional)</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">Email (Optional)</label>
                     <input
                       type="email"
                       value={profileForm.email}
                       onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
                       placeholder="merchant@example.com"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-400 block mb-1">Meta Pixel ID (Optional)</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-300 block mb-1">Meta Pixel ID (Optional)</label>
                     <input
                       type="text"
                       value={profileForm.pixel_id}
                       onChange={e => setProfileForm({ ...profileForm, pixel_id: e.target.value })}
                       placeholder="e.g. 1234567890"
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-white outline-none font-mono"
+                      className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono font-medium outline-none shadow-sm placeholder:text-slate-500"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
                   </div>
                 </div>
