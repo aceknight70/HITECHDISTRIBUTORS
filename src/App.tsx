@@ -972,6 +972,11 @@ export default function App() {
       setRoomHistory(prev => prev.slice(0, -1));
       _setCurrentRoom(prevRoom);
     } else {
+      // If customer entered through a specific tenant storefront, return them directly to it
+      if (enteredTenant && !activeTenantSpace) {
+        setActiveTenantSpace(enteredTenant);
+        return;
+      }
       setInStore(false);
     }
   };
@@ -1028,7 +1033,25 @@ export default function App() {
   const [copiedMainShowroomLink, setCopiedMainShowroomLink] = useState(false);
   const [copiedStorefrontLink, setCopiedStorefrontLink] = useState(false);
 
-  // Sync authenticated merchant session from sessionStorage when hubTenants are loaded
+  // Customer session memory: remember which tenant the customer entered through for the whole session
+  const [enteredTenant, setEnteredTenant] = useState<HubTenant | null>(null);
+
+  const rememberEnteredTenant = (tenant: HubTenant) => {
+    setEnteredTenant(tenant);
+    try {
+      sessionStorage.setItem("hitech_entered_tenant", JSON.stringify({
+        id: tenant.id,
+        tenant_name: tenant.tenant_name,
+        referral_code: tenant.referral_code,
+        category: tenant.category
+      }));
+      sessionStorage.setItem("hitech_entered_tenant_id", tenant.id);
+      sessionStorage.setItem("hitech_entered_tenant_code", tenant.referral_code || "");
+      sessionStorage.setItem("hitech_entered_tenant_name", tenant.tenant_name);
+    } catch (e) {}
+  };
+
+  // Sync authenticated merchant session & entered customer tenant from sessionStorage when hubTenants load
   useEffect(() => {
     try {
       const savedMerchantId = sessionStorage.getItem("hitech_auth_merchant_id");
@@ -1036,6 +1059,21 @@ export default function App() {
         const found = hubTenants.find(t => t.id === savedMerchantId);
         if (found) {
           setAuthenticatedMerchantSession(found);
+        }
+      }
+
+      const savedEnteredTenant = sessionStorage.getItem("hitech_entered_tenant");
+      if (savedEnteredTenant) {
+        const parsed = JSON.parse(savedEnteredTenant);
+        if (hubTenants.length > 0) {
+          const foundTenant = hubTenants.find(t => t.id === parsed.id || (t.referral_code && t.referral_code.toUpperCase() === (parsed.referral_code || "").toUpperCase()));
+          if (foundTenant) {
+            setEnteredTenant(foundTenant);
+          } else {
+            setEnteredTenant(parsed);
+          }
+        } else {
+          setEnteredTenant(parsed);
         }
       }
     } catch (e) {}
@@ -3282,6 +3320,35 @@ Issue: ${escDesc}`;
               Enter Showroom →
             </motion.button>
 
+            {/* Active Session Tenant Resume Card */}
+            {enteredTenant && (
+              <div className="p-3.5 bg-emerald-950/90 border-2 border-emerald-500/60 rounded-xl flex items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-emerald-600/30 border border-emerald-400 flex items-center justify-center flex-shrink-0">
+                    <Store className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="truncate">
+                    <span className="text-xs font-black text-white block truncate">
+                      Your Active Merchant: <strong className="text-emerald-300">{enteredTenant.tenant_name}</strong>
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      Promo Code: {enteredTenant.referral_code}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setActiveTenantSpace(enteredTenant);
+                    setInStore(true);
+                  }}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1 shadow-md transition-all flex-shrink-0 cursor-pointer"
+                >
+                  <span>Enter Storefront</span>
+                  <span>→</span>
+                </button>
+              </div>
+            )}
+
             {/* Enter Tenant ID Flow */}
             <div className="mt-4 p-4 border-2 border-emerald-600/40 bg-slate-900/95 rounded-xl shadow-lg text-slate-200 select-text touch-auto">
               <h4 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-2">
@@ -3416,6 +3483,19 @@ Issue: ${escDesc}`;
               <button onClick={handleBack} className="h-[44px] px-3 font-bold text-sm flex justify-center items-center bg-white text-[#1a2a4a] border border-[#1a2a4a] rounded shadow-sm hover:bg-slate-100 transition-colors flex-shrink-0 whitespace-nowrap">
                 &larr; Back
               </button>
+              {enteredTenant && !activeTenantSpace && (
+                <button
+                  onClick={() => {
+                    setActiveTenantSpace(enteredTenant);
+                    setInStore(true);
+                  }}
+                  className="h-[44px] px-3 font-bold text-xs flex justify-center items-center bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded shadow-sm transition-colors flex-shrink-0 whitespace-nowrap cursor-pointer gap-1.5"
+                  title={`Direct return to ${enteredTenant.tenant_name}'s storefront`}
+                >
+                  <Store className="w-3.5 h-3.5 text-white" />
+                  <span>← {enteredTenant.tenant_name.split(' ')[0]}'s Store</span>
+                </button>
+              )}
               <button onClick={() => setInStore(false)} className="h-[44px] w-[44px] flex justify-center items-center border border-[#1a2a4a] bg-white text-black hover:bg-[#1a2a4a] hover:text-white transition-colors rounded flex-shrink-0">
                 <Home className="w-5 h-5" />
               </button>
@@ -3444,6 +3524,35 @@ Issue: ${escDesc}`;
               )}
             </div>
           </header>
+
+          {/* Persistent Customer Tenant Referral Bar */}
+          {enteredTenant && !activeTenantSpace && (
+            <div className="w-full bg-emerald-950 border-b-2 border-emerald-500/60 px-4 py-2 flex items-center justify-between gap-3 shadow-md z-30">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-full bg-emerald-500/20 border border-emerald-400/60 flex items-center justify-center flex-shrink-0">
+                  <Store className="w-3.5 h-3.5 text-emerald-300" />
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-bold text-white truncate">
+                    Exploring Main Showroom via <strong className="text-emerald-300 underline font-black">{enteredTenant.tenant_name}</strong>
+                  </p>
+                  <p className="text-[10px] text-emerald-400 font-mono">
+                    Promo Code: {enteredTenant.referral_code}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTenantSpace(enteredTenant);
+                  setInStore(true);
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md transition-all flex-shrink-0 cursor-pointer"
+                title={`Direct return to ${enteredTenant.tenant_name}'s storefront`}
+              >
+                <span>← Back to Storefront</span>
+              </button>
+            </div>
+          )}
 
           {/* Dynamic Room Content */}
           <main className="content-area flex-grow p-4 overflow-y-auto max-w-[430px] mx-auto w-full">
@@ -6877,7 +6986,26 @@ Issue: ${escDesc}`;
 
           {/* Floating Action Stack */}
           {inStore && (
-            <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-50 pointer-events-none">
+            <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-50 pointer-events-none items-end">
+              {enteredTenant && !activeTenantSpace && (
+                <motion.button 
+                  drag
+                  dragMomentum={false}
+                  onClick={() => {
+                    setActiveTenantSpace(enteredTenant);
+                    setInStore(true);
+                  }}
+                  className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-full flex items-center gap-1.5 text-white shadow-[0_6px_20px_rgba(16,185,129,0.5)] border-2 border-white/40 cursor-grab active:cursor-grabbing pointer-events-auto"
+                  title={`Direct return to ${enteredTenant.tenant_name}'s storefront`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Store className="w-4 h-4 text-white flex-shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
+                    ← {enteredTenant.tenant_name.split(' ')[0]}'s Store
+                  </span>
+                </motion.button>
+              )}
               <motion.button 
                 drag
                 dragMomentum={false}
@@ -7298,6 +7426,7 @@ Issue: ${escDesc}`;
                 <button
                   onClick={async () => {
                     const { tenant, source } = pendingTenantConfirmation;
+                    rememberEnteredTenant(tenant);
                     await logTenantTraffic(tenant.id, tenant.referral_code, source);
                     setActiveTenantSpace(tenant);
                     setInvoiceTenantCode(tenant.referral_code);
@@ -7388,6 +7517,7 @@ Issue: ${escDesc}`;
 
               <button 
                 onClick={() => {
+                  rememberEnteredTenant(activeTenantSpace);
                   setActiveTenantSpace(null);
                   setCurrentRoom("showroom");
                   setInStore(true);
