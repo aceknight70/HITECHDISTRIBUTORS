@@ -201,6 +201,38 @@ app.delete("/api/tenants/:id/products/:prodId", (req, res) => {
   }
 });
 
+const tenantOrdersFilePath = path.join(dataDir, "tenant_orders.json");
+
+// API: Tenant Orders CRUD
+app.get("/api/tenants/:id/orders", (req, res) => {
+  const { id } = req.params;
+  const orders = readJsonFile<any[]>(tenantOrdersFilePath, []);
+  const tenantOrders = orders.filter(o => o.tenant_id === id);
+  res.json(tenantOrders);
+});
+
+app.post("/api/tenants/:id/orders", (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = req.body;
+    if (!order || !order.id) {
+      return res.status(400).json({ error: "Order ID and details required" });
+    }
+    order.tenant_id = id;
+    let orders = readJsonFile<any[]>(tenantOrdersFilePath, []);
+    const idx = orders.findIndex(o => o.id === order.id);
+    if (idx !== -1) {
+      orders[idx] = { ...orders[idx], ...order };
+    } else {
+      orders.unshift(order);
+    }
+    writeJsonFile(tenantOrdersFilePath, orders);
+    res.json({ success: true, order });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to save order" });
+  }
+});
+
 // Lazy-loaded Gemini AI client to prevent startup crashes if key is missing
 let aiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI {

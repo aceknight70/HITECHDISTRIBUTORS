@@ -1,0 +1,46 @@
+[
+  {
+    "id": "a0000000-0000-0000-0000-000000000001",
+    "tenant_name": "Martins",
+    "category": "Solar & Inverter Systems",
+    "description": "Certified solar installer and inverter technician.",
+    "referral_code": "MARTINSQW13",
+    "pin": "7139",
+    "commission_rate": 1,
+    "status": "active"
+  },
+  {
+    "id": "2bd9900a-c315-40ab-9e26-f59b62ba2a87",
+    "tenant_name": "Favour Atigolo (Shama's Findings)",
+    "category": "Home, Personal & Food Essentials",
+    "description": "Everyday-essentials brand built around three practical product lines: The Stain Rectifier, female underwear and lingerie, and crayfish products.",
+    "referral_code": "SHAMASFINDINGS01",
+    "pin": "4444",
+    "commission_rate": 1,
+    "status": "active"
+  },
+  {
+    "id": "a0000000-0000-0000-0000-000000000002",
+    "tenant_name": "Sumshi",
+    "category": "Solar Power & POS Systems",
+    "description": "Commercial and retail merchant solutions.",
+    "referral_code": "SUMSHI",
+    "pin": "9284",
+    "commission_rate": 1,
+    "status": "active"
+  },
+  {
+    "id": "920b105b-cf8f-4397-b5d8-8de25fd42e11",
+    "tenant_name": "Wealth",
+    "category": "Food — Fish Products",
+    "description": "Specialist supplier of quality dried crayfish, stockfish (cod/okporoko), and assorted premium fish products.",
+    "referral_code": "WEALTHFISH01",
+    "contact_info": {
+      "phone": "+2348165103607",
+      "whatsapp": "+2348165103607"
+    },
+    "pin": "5443",
+    "commission_rate": 1,
+    "status": "active"
+  }
+]

@@ -60,11 +60,12 @@ import {
   Edit,
   Moon,
   Users,
-  Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle, Share2, Link
+  Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle, Share2, Link,
+  Truck, Key
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
-import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, findMatchingTenant, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, MasterTenantNotification } from "./lib/supabase";
+import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, findMatchingTenant, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, HubTenantOrder, MasterTenantNotification } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
 import { HitechLogo } from "./components/HitechLogo";
@@ -1033,6 +1034,23 @@ export default function App() {
   const [copiedMainShowroomLink, setCopiedMainShowroomLink] = useState(false);
   const [copiedStorefrontLink, setCopiedStorefrontLink] = useState(false);
 
+  // Customer Product Order Modal state
+  const [orderingProduct, setOrderingProduct] = useState<{
+    product: HubTenantProduct;
+    tenant: HubTenant;
+  } | null>(null);
+  const [orderQty, setOrderQty] = useState<string>("1");
+  const [orderCustomerName, setOrderCustomerName] = useState("");
+  const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
+  const [orderIsDelivery, setOrderIsDelivery] = useState(false);
+  const [orderDeliveryAddress, setOrderDeliveryAddress] = useState("");
+  const [orderCustomerNotes, setOrderCustomerNotes] = useState("");
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderSuccessNotice, setOrderSuccessNotice] = useState<string | null>(null);
+  const [placedOrderReference, setPlacedOrderReference] = useState<string | null>(null);
+  const [masterEditingPinTenant, setMasterEditingPinTenant] = useState<HubTenant | null>(null);
+  const [masterNewPin, setMasterNewPin] = useState("");
+
   // Customer session memory: remember which tenant the customer entered through for the whole session
   const [enteredTenant, setEnteredTenant] = useState<HubTenant | null>(null);
 
@@ -1108,14 +1126,14 @@ export default function App() {
 
   // Lock background body scroll whenever tenant space or modal is open to ensure internal scrolling works 100%
   useEffect(() => {
-    if (activeTenantSpace || showTenantDirectory || pendingTenantConfirmation || showAllyDirectory || activeAllyModal || showTenantSelfService || lightboxPhotoIndex !== null) {
+    if (activeTenantSpace || showTenantDirectory || pendingTenantConfirmation || showAllyDirectory || activeAllyModal || showTenantSelfService || lightboxPhotoIndex !== null || orderingProduct !== null || masterEditingPinTenant !== null) {
       const origOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = origOverflow;
       };
     }
-  }, [activeTenantSpace, showTenantDirectory, pendingTenantConfirmation, showAllyDirectory, activeAllyModal, showTenantSelfService, lightboxPhotoIndex]);
+  }, [activeTenantSpace, showTenantDirectory, pendingTenantConfirmation, showAllyDirectory, activeAllyModal, showTenantSelfService, lightboxPhotoIndex, orderingProduct, masterEditingPinTenant]);
 
   const [staffDirectory, setStaffDirectory] = useState([
     { id: "HTD-001", name: "Alice K.", role: "Sales Rep" },
@@ -3365,7 +3383,7 @@ Issue: ${escDesc}`;
                     setTenantEntryCode(e.target.value.toUpperCase());
                     if (tenantCodeError) setTenantCodeError("");
                   }}
-                  placeholder="e.g. SHAMASFINDINGS01, MARTINSQW13, or SUMSHI"
+                  placeholder="e.g. WEALTHFISH01, SHAMASFINDINGS01, MARTINSQW13"
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-white uppercase focus:border-emerald-500 focus:outline-none placeholder-slate-500 tracking-wider"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -5671,6 +5689,17 @@ Issue: ${escDesc}`;
                                     <Box className="w-3 h-3" />
                                     <span>Products</span>
                                   </button>
+                                  <button
+                                    onClick={() => {
+                                      setMasterEditingPinTenant(tenant);
+                                      setMasterNewPin("");
+                                    }}
+                                    className="px-2 py-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 rounded text-[10px] font-bold flex items-center gap-1 border border-amber-800/80 cursor-pointer"
+                                    title="Set Tenant 4-digit PIN"
+                                  >
+                                    <Key className="w-3 h-3 text-amber-400" />
+                                    <span>PIN</span>
+                                  </button>
                                   <button onClick={async () => {
                                     const nextStatus = tenant.status === 'active' ? 'inactive' : 'active';
                                     await saveHubTenant({...tenant, status: nextStatus});
@@ -7788,10 +7817,11 @@ Issue: ${escDesc}`;
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {currentTenantProducts.map(prod => {
-                    const priceFormatted = (prod.price !== null && prod.price !== undefined && Number(prod.price) > 0)
-                      ? `₦${Number(prod.price).toLocaleString()}`
-                      : "Price on request";
-                    const isPriceOnRequest = priceFormatted === "Price on request";
+                    const hasValidPrice = prod.price !== null && prod.price !== undefined && Number(prod.price) > 0;
+                    const priceFormatted = hasValidPrice
+                      ? `₦${Number(prod.price).toLocaleString()} ${prod.unit ? `per ${prod.unit}` : ""}`
+                      : `Price on request ${prod.unit ? `(per ${prod.unit})` : ""}`;
+                    const isPriceOnRequest = !hasValidPrice;
 
                     return (
                       <div 
@@ -7841,15 +7871,32 @@ Issue: ${escDesc}`;
                           </div>
 
                           <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setOrderingProduct({ product: prod, tenant: activeTenantSpace });
+                                setOrderQty("1");
+                                setOrderIsDelivery(false);
+                                setOrderDeliveryAddress("");
+                                setOrderCustomerName("");
+                                setOrderCustomerPhone("");
+                                setOrderCustomerNotes("");
+                                setOrderSuccessNotice(null);
+                              }}
+                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span>Order Now</span>
+                            </button>
                             {activeTenantSpace.contact_info?.whatsapp && (
                               <a
                                 href={`https://wa.me/${activeTenantSpace.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hello ${activeTenantSpace.tenant_name}, I want to order/inquire about: ${prod.product_name} (${priceFormatted})`)}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                                className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 transition-colors border border-slate-700"
+                                title="Chat on WhatsApp"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
-                                <span>Order (WhatsApp)</span>
+                                <span className="hidden sm:inline">WhatsApp</span>
                               </a>
                             )}
                             {activeTenantSpace.invoicing_enabled && (
@@ -7871,7 +7918,7 @@ Issue: ${escDesc}`;
                                   setCurrentRoom("invoice");
                                   setInStore(true);
                                 }}
-                                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 border border-slate-700 transition-colors cursor-pointer"
+                                className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 border border-slate-700 transition-colors cursor-pointer"
                                 title="Add to Order & Generate Official Invoice"
                               >
                                 <FileText className="w-3.5 h-3.5 text-blue-400" />
@@ -8163,6 +8210,378 @@ Issue: ${escDesc}`;
             setPendingTenantConfirmation({ tenant, source: 'referral' });
           }}
         />
+      )}
+      {/* Customer Direct Order Modal for Tenant Products */}
+      {orderingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full text-slate-100 shadow-2xl relative my-8">
+            <button
+              onClick={() => {
+                setOrderingProduct(null);
+                setOrderSuccessNotice(null);
+              }}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {orderSuccessNotice ? (
+              <div className="text-center py-6 flex flex-col items-center gap-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+                  <CheckCircle className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-1">Order Received!</h3>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    Your order was submitted directly to <strong className="text-emerald-400">{orderingProduct.tenant.tenant_name}</strong>.
+                  </p>
+                </div>
+                <div className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-left text-xs font-mono flex flex-col gap-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Order Ref:</span>
+                    <span className="text-slate-200 font-bold">{orderSuccessNotice.id.slice(0, 8)}...</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Item:</span>
+                    <span className="text-slate-200">{orderSuccessNotice.product_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Quantity:</span>
+                    <span className="text-emerald-400 font-bold">{orderSuccessNotice.quantity} {orderSuccessNotice.unit}</span>
+                  </div>
+                  {orderSuccessNotice.total_amount > 0 && (
+                    <div className="flex justify-between border-t border-slate-800 pt-1.5">
+                      <span className="text-slate-500">Total:</span>
+                      <span className="text-emerald-400 font-bold text-sm">₦{Number(orderSuccessNotice.total_amount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {orderSuccessNotice.delivery && (
+                    <div className="border-t border-slate-800 pt-1.5 text-slate-400">
+                      <span>Delivery: {orderSuccessNotice.delivery_address}</span>
+                    </div>
+                  )}
+                </div>
+
+                {orderingProduct.tenant.contact_info?.whatsapp && (
+                  <a
+                    href={`https://wa.me/${orderingProduct.tenant.contact_info.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(
+                      `Hello ${orderingProduct.tenant.tenant_name}, I just placed order #${orderSuccessNotice.id.slice(0, 8)} for ${orderSuccessNotice.quantity} ${orderSuccessNotice.unit} of ${orderSuccessNotice.product_name}. Customer: ${orderSuccessNotice.customer_name} (${orderSuccessNotice.customer_phone}).`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-950/50"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Chat with {orderingProduct.tenant.tenant_name} on WhatsApp</span>
+                  </a>
+                )}
+
+                <button
+                  onClick={() => {
+                    setOrderingProduct(null);
+                    setOrderSuccessNotice(null);
+                  }}
+                  className="text-xs text-slate-400 hover:text-white underline cursor-pointer mt-1"
+                >
+                  Close Window
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                <div className="border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    <ShoppingCart className="w-4 h-4" />
+                    <span>Place Order &bull; {orderingProduct.tenant.tenant_name}</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white mt-1">
+                    {orderingProduct.product.product_name}
+                  </h3>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {orderingProduct.product.price ? (
+                      <span className="text-emerald-400 font-bold font-mono">
+                        ₦{Number(orderingProduct.product.price).toLocaleString()} per {orderingProduct.product.unit || "unit"}
+                      </span>
+                    ) : (
+                      <span className="text-amber-400 font-mono italic">
+                        Price on request {orderingProduct.product.unit ? `(per ${orderingProduct.product.unit})` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  {/* Quantity and Live Calculation */}
+                  <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex justify-between">
+                      <span>Quantity ({orderingProduct.product.unit || "units"})</span>
+                      <span className="text-[10px] text-slate-500">Supports decimals (e.g. 2.5)</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.1"
+                        value={orderQty}
+                        onChange={(e) => setOrderQty(e.target.value)}
+                        className="w-32 px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-bold text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                        placeholder="1"
+                      />
+                      <span className="text-sm font-semibold text-slate-300 uppercase tracking-wider font-mono">
+                        {orderingProduct.product.unit || "units"}
+                      </span>
+                    </div>
+
+                    {/* Live total display */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-xs text-slate-400 font-mono">Total Estimated:</span>
+                      {orderingProduct.product.price ? (
+                        <span className="text-lg font-extrabold text-emerald-400 font-mono">
+                          ₦{(Math.max(0, parseFloat(orderQty) || 0) * Number(orderingProduct.product.price)).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-400 italic">
+                          Price on request (Quote via WhatsApp)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer Details */}
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        Your Name <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={orderCustomerName}
+                        onChange={(e) => setOrderCustomerName(e.target.value)}
+                        placeholder="e.g. Amaka Okafor"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        Phone / WhatsApp Number <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={orderCustomerPhone}
+                        onChange={(e) => setOrderCustomerPhone(e.target.value)}
+                        placeholder="e.g. 0816 510 3607"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+
+                    {/* Delivery Option */}
+                    <div className="pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={orderIsDelivery}
+                          onChange={(e) => setOrderIsDelivery(e.target.checked)}
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Request Delivery to Address</span>
+                        </span>
+                      </label>
+
+                      {orderIsDelivery && (
+                        <div className="mt-2 pl-6">
+                          <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                            Delivery Address in Nigeria <span className="text-red-400">*</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={orderDeliveryAddress}
+                            onChange={(e) => setOrderDeliveryAddress(e.target.value)}
+                            placeholder="Enter street address, landmark, town/city, and state"
+                            className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Customer Notes */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        Special Instructions / Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={orderCustomerNotes}
+                        onChange={(e) => setOrderCustomerNotes(e.target.value)}
+                        placeholder="e.g. please package tightly, call when nearby"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Submit Action */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    disabled={orderSubmitting || !orderCustomerName.trim() || !orderCustomerPhone.trim() || (orderIsDelivery && !orderDeliveryAddress.trim())}
+                    onClick={async () => {
+                      if (!orderCustomerName.trim() || !orderCustomerPhone.trim()) {
+                        alert("Please enter your name and phone number.");
+                        return;
+                      }
+                      if (orderIsDelivery && !orderDeliveryAddress.trim()) {
+                        alert("Please provide your delivery address.");
+                        return;
+                      }
+                      setOrderSubmitting(true);
+                      try {
+                        const qty = Math.max(0.1, parseFloat(orderQty) || 1);
+                        const unitPrice = orderingProduct.product.price ? Number(orderingProduct.product.price) : null;
+                        const totalPrice = unitPrice !== null ? qty * unitPrice : null;
+
+                        const newOrder = await db.saveTenantOrder({
+                          tenant_id: orderingProduct.tenant.id,
+                          tenant_name: orderingProduct.tenant.tenant_name,
+                          product_id: orderingProduct.product.id,
+                          product_name: orderingProduct.product.product_name,
+                          quantity: qty,
+                          unit: orderingProduct.product.unit || "unit",
+                          unit_price: unitPrice,
+                          total_amount: totalPrice || 0,
+                          customer_name: orderCustomerName.trim(),
+                          customer_phone: orderCustomerPhone.trim(),
+                          delivery: orderIsDelivery,
+                          delivery_address: orderIsDelivery ? orderDeliveryAddress.trim() : undefined,
+                          notes: orderCustomerNotes.trim() || undefined,
+                          status: "New",
+                        });
+
+                        if (totalPrice && totalPrice > 0) {
+                          const commRate = orderingProduct.tenant.commission_rate ?? 1.0;
+                          const commAmount = Math.round((totalPrice * commRate) / 100);
+                          await db.logTenantCommission({
+                            tenant_id: orderingProduct.tenant.id,
+                            tenant_name: orderingProduct.tenant.tenant_name,
+                            invoice_reference: `Order #${newOrder.id.slice(0, 8)} (${newOrder.product_name})`,
+                            customer_name: orderCustomerName.trim(),
+                            sale_amount: totalPrice,
+                            commission_rate_applied: commRate,
+                            commission_amount: commAmount,
+                            status: "Pending",
+                            logged_by_staff: "Customer Direct Order"
+                          });
+                        }
+
+                        setOrderSuccessNotice(newOrder);
+                      } catch (err) {
+                        console.error("Failed to place order:", err);
+                        alert("Failed to submit order. Please try again or reach out on WhatsApp.");
+                      } finally {
+                        setOrderSubmitting(false);
+                      }
+                    }}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-lg shadow-emerald-950/50 cursor-pointer"
+                  >
+                    {orderSubmitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Submitting Order...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Confirm & Submit Order</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setOrderingProduct(null)}
+                    className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Master Section: Tenant PIN Management Modal */}
+      {masterEditingPinTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full text-slate-100 shadow-2xl relative">
+            <button
+              onClick={() => setMasterEditingPinTenant(null)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-2">
+              <Key className="w-4 h-4" />
+              <span>Master Security &bull; Set Tenant PIN</span>
+            </div>
+
+            <h3 className="text-lg font-bold text-white">
+              {masterEditingPinTenant.tenant_name}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1 mb-5">
+              Set or update the private 4-digit PIN for self-service access. This PIN gives the merchant access to their own Gallery, Products, Orders and Earnings only.
+            </p>
+
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 mb-5">
+              <label className="text-xs font-bold text-slate-300">
+                New 4-Digit PIN
+              </label>
+              <input
+                type="text"
+                maxLength={4}
+                value={masterNewPin}
+                onChange={(e) => setMasterNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="Enter new 4-digit PIN"
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 font-mono font-bold text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+              />
+              <p className="text-[11px] text-slate-500">
+                Tenant code: <span className="font-mono text-slate-300">{masterEditingPinTenant.referral_code}</span>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                disabled={masterNewPin.length !== 4}
+                onClick={async () => {
+                  try {
+                    const updated = { ...masterEditingPinTenant, pin: masterNewPin };
+                    await saveHubTenant(updated);
+                    setHubTenants(await fetchHubTenants());
+                    alert(`PIN for ${masterEditingPinTenant.tenant_name} updated successfully.`);
+                    setMasterEditingPinTenant(null);
+                  } catch (err) {
+                    console.error("Failed to update PIN:", err);
+                    alert("Failed to update PIN.");
+                  }
+                }}
+                className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+              >
+                Save PIN
+              </button>
+              <button
+                onClick={() => setMasterEditingPinTenant(null)}
+                className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
     </>

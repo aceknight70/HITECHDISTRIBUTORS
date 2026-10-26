@@ -22,10 +22,13 @@ import {
   EyeOff,
   Share2,
   Copy,
-  Link
+  Link,
+  ShoppingCart,
+  CheckCircle2,
+  Truck
 } from "lucide-react";
 import * as db from "./lib/supabase";
-import { HubTenant, HubTenantProduct, HubTenantCommission, uploadToSupabaseStorage, DEFAULT_30_SLOT_MOCKUPS } from "./lib/supabase";
+import { HubTenant, HubTenantProduct, HubTenantCommission, HubTenantOrder, uploadToSupabaseStorage, DEFAULT_30_SLOT_MOCKUPS } from "./lib/supabase";
 import TenantPhotoLightbox from "./components/TenantPhotoLightbox";
 
 interface TenantSelfServiceProps {
@@ -108,7 +111,7 @@ export default function TenantSelfService({
   }, []);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<"gallery" | "products" | "earnings" | "settings">("gallery");
+  const [activeTab, setActiveTab] = useState<"gallery" | "products" | "orders" | "earnings" | "settings">("gallery");
 
   // Gallery state (30 slots)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -126,6 +129,7 @@ export default function TenantSelfService({
     id?: string;
     product_name: string;
     price: string;
+    unit: string;
     description: string;
     category: string;
     photo_url: string;
@@ -133,12 +137,17 @@ export default function TenantSelfService({
   }>({
     product_name: "",
     price: "",
+    unit: "piece",
     description: "",
     category: "",
     photo_url: "",
     in_stock: true
   });
   const [productSaveError, setProductSaveError] = useState("");
+
+  // Orders state - strictly isolated to current tenant
+  const [orders, setOrders] = useState<HubTenantOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // Earnings state
   const [commissions, setCommissions] = useState<HubTenantCommission[]>([]);
@@ -148,6 +157,7 @@ export default function TenantSelfService({
   useEffect(() => {
     if (authenticatedTenant) {
       loadTenantProducts(authenticatedTenant.id);
+      loadTenantOrders(authenticatedTenant.id);
       loadTenantCommissions(authenticatedTenant.id);
       setProfileForm({
         tenant_name: authenticatedTenant.tenant_name || "",
@@ -205,6 +215,19 @@ export default function TenantSelfService({
       console.error("Error loading tenant products:", e);
     } finally {
       setLoadingProducts(false);
+    }
+  };
+
+  const loadTenantOrders = async (tenantId: string) => {
+    setLoadingOrders(true);
+    try {
+      const ords = await db.fetchTenantOrders(tenantId);
+      // Strictly filter to authenticated tenant's ID
+      setOrders(ords.filter(o => o.tenant_id === tenantId));
+    } catch (e) {
+      console.error("Error loading tenant orders:", e);
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -399,6 +422,7 @@ export default function TenantSelfService({
       tenant_id: authenticatedTenant.id,
       product_name: productForm.product_name.trim(),
       price: priceNum,
+      unit: productForm.unit || "piece",
       description: productForm.description.trim(),
       category: productForm.category.trim() || authenticatedTenant.category,
       photo_url: productForm.photo_url.trim() || DEFAULT_30_SLOT_MOCKUPS[0],
@@ -414,6 +438,7 @@ export default function TenantSelfService({
     setProductForm({
       product_name: "",
       price: "",
+      unit: "piece",
       description: "",
       category: "",
       photo_url: "",
@@ -720,12 +745,8 @@ export default function TenantSelfService({
             </div>
             <div className="flex items-center gap-2 text-[10px] font-mono text-white">
               <span>Code: <strong className="text-white font-bold">{authenticatedTenant.referral_code}</strong></span>
-              {authenticatedTenant.pin && (
-                <>
-                  <span className="text-slate-500">•</span>
-                  <span>PIN: <strong className="text-white font-bold">{authenticatedTenant.pin}</strong></span>
-                </>
-              )}
+              <span className="text-slate-500">•</span>
+              <span className="text-emerald-400 font-semibold flex items-center gap-1">🔒 Verified Owner</span>
               <span className="text-slate-500">•</span>
               <span>Comm: <strong className="text-white">{authenticatedTenant.commission_rate ?? 1.0}%</strong></span>
               {authenticatedTenant.pixel_id && (
@@ -809,6 +830,18 @@ export default function TenantSelfService({
           >
             <Box className="w-4 h-4" />
             <span>My Products ({products.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("orders")}
+            className={`py-3 px-2 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center gap-2 transition-all cursor-pointer flex-shrink-0 ${
+              activeTab === "orders"
+                ? "border-emerald-500 text-emerald-400"
+                : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>My Orders ({orders.length})</span>
           </button>
 
           <button
@@ -1142,6 +1175,7 @@ export default function TenantSelfService({
                   setProductForm({
                     product_name: "",
                     price: "",
+                    unit: "piece",
                     description: "",
                     category: authenticatedTenant.category,
                     photo_url: "",
@@ -1185,7 +1219,7 @@ export default function TenantSelfService({
                       required
                       value={productForm.product_name}
                       onChange={e => setProductForm({ ...productForm, product_name: e.target.value })}
-                      placeholder="e.g. The Stain Rectifier (500ml) or 5kVA Solar Inverter"
+                      placeholder="e.g. Crayfish, Stockfish, or Solar Inverter"
                       className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm placeholder:text-slate-500"
                       style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                     />
@@ -1206,6 +1240,25 @@ export default function TenantSelfService({
                   </div>
 
                   <div>
+                    <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
+                      Unit of Measure * (Sold By)
+                    </label>
+                    <select
+                      value={productForm.unit || "piece"}
+                      onChange={e => setProductForm({ ...productForm, unit: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 font-medium outline-none focus:border-emerald-500 shadow-sm cursor-pointer"
+                      style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                    >
+                      <option value="piece">piece</option>
+                      <option value="cup">cup</option>
+                      <option value="kg">kg</option>
+                      <option value="bundle">bundle</option>
+                      <option value="pack">pack</option>
+                      <option value="litre">litre</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
                     <label className="text-[10px] font-bold text-slate-300 uppercase tracking-widest block mb-1">
                       Category
                     </label>
@@ -1351,8 +1404,10 @@ export default function TenantSelfService({
 
                     <div className="flex-1 flex flex-col gap-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-emerald-400 font-mono">
-                          {prod.price ? `₦${Number(prod.price).toLocaleString()}` : "Price on request"}
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                          {prod.price 
+                            ? `₦${Number(prod.price).toLocaleString()} per ${prod.unit || "piece"}` 
+                            : `Price on request${prod.unit ? ` (per ${prod.unit})` : ""}`}
                         </span>
                         {prod.category && (
                           <span className="text-[8px] bg-slate-950 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800 uppercase font-mono">
@@ -1374,6 +1429,7 @@ export default function TenantSelfService({
                             id: prod.id,
                             product_name: prod.product_name,
                             price: prod.price ? String(prod.price) : "",
+                            unit: prod.unit || "piece",
                             description: prod.description || "",
                             category: prod.category || authenticatedTenant.category,
                             photo_url: prod.photo_url || "",
@@ -1401,7 +1457,197 @@ export default function TenantSelfService({
           </div>
         )}
 
-        {/* ---------------- TAB 3: MY EARNINGS ---------------- */}
+        {/* ---------------- TAB: MY ORDERS ---------------- */}
+        {activeTab === "orders" && (
+          <div className="flex flex-col gap-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-emerald-400" />
+                  <span>Customer Storefront Orders ({orders.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Real-time customer orders placed for products in your storefront (<strong>{authenticatedTenant.tenant_name}</strong>). Strictly isolated to your account.
+                </p>
+              </div>
+              <button
+                onClick={() => loadTenantOrders(authenticatedTenant.id)}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-mono flex items-center gap-1.5 self-start sm:self-center transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingOrders ? 'animate-spin text-emerald-400' : ''}`} />
+                <span>Refresh Orders</span>
+              </button>
+            </div>
+
+            {/* Orders Metric Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Received</span>
+                <h4 className="text-lg font-black text-white mt-0.5 font-mono">
+                  {orders.length}
+                </h4>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">New</span>
+                <h4 className="text-lg font-black text-emerald-400 mt-0.5 font-mono">
+                  {orders.filter(o => o.status === "New").length}
+                </h4>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">Processing</span>
+                <h4 className="text-lg font-black text-amber-400 mt-0.5 font-mono">
+                  {orders.filter(o => o.status === "Processing").length}
+                </h4>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+                <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">Completed</span>
+                <h4 className="text-lg font-black text-blue-400 mt-0.5 font-mono">
+                  {orders.filter(o => o.status === "Completed").length}
+                </h4>
+              </div>
+            </div>
+
+            {/* Orders List */}
+            {loadingOrders ? (
+              <div className="py-16 text-center flex flex-col items-center justify-center gap-2">
+                <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin" />
+                <span className="text-xs text-slate-400 font-mono">Loading your orders...</span>
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="py-14 bg-slate-900/50 rounded-2xl border border-dashed border-slate-800 text-center flex flex-col items-center gap-3">
+                <ShoppingCart className="w-10 h-10 text-slate-700" />
+                <h4 className="text-sm font-bold text-slate-300 uppercase">No Orders Yet</h4>
+                <p className="text-xs text-slate-500 max-w-sm">
+                  When customers browse your storefront and submit product orders (with quantity, unit, and delivery address), they will appear right here.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3.5">
+                {orders.map(order => {
+                  const formattedTotal = order.total_amount && order.total_amount > 0 
+                    ? `₦${Number(order.total_amount).toLocaleString()}` 
+                    : (order.unit_price ? `₦${Number(order.unit_price * order.quantity).toLocaleString()}` : "Price on request");
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="bg-slate-900 border border-slate-800 hover:border-emerald-500/40 rounded-xl p-4.5 flex flex-col gap-3 shadow-md transition-colors"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-white">
+                            #{order.id.slice(0, 14)}
+                          </span>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-[11px] font-mono text-slate-400">
+                            {new Date(order.created_at).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric"
+                            })} {new Date(order.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono ${
+                              order.status === "Completed"
+                                ? "bg-blue-950 text-blue-400 border border-blue-800"
+                                : order.status === "Processing"
+                                ? "bg-amber-950 text-amber-400 border border-amber-800"
+                                : "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                          <select
+                            value={order.status}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value as "New" | "Processing" | "Completed";
+                              await db.updateTenantOrderStatus(order.id, newStatus);
+                              await loadTenantOrders(authenticatedTenant.id);
+                            }}
+                            className="bg-slate-950 text-slate-300 border border-slate-700 text-[10px] rounded px-2 py-1 font-mono cursor-pointer"
+                          >
+                            <option value="New">Set: New</option>
+                            <option value="Processing">Set: Processing</option>
+                            <option value="Completed">Set: Completed</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Main Item & Quantity Details */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800/80">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Ordered Item</span>
+                          <h4 className="text-base font-black text-white mt-0.5">
+                            {order.quantity} {order.unit}{order.quantity !== 1 && !order.unit.endsWith('s') && order.unit !== 'kg' && order.unit !== 'litre' ? 's' : ''} of {order.product_name}
+                          </h4>
+                          <span className="text-xs text-slate-400 font-mono mt-0.5 block">
+                            Rate: {order.unit_price ? `₦${Number(order.unit_price).toLocaleString()} per ${order.unit}` : "Price on request"}
+                          </span>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Live Order Total</span>
+                          <span className="text-lg font-black text-emerald-400 font-mono">
+                            {formattedTotal}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Customer Contact & Delivery Details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col gap-1 text-xs">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Customer Details</span>
+                          <p className="font-bold text-white text-xs mt-0.5">{order.customer_name}</p>
+                          <p className="font-mono text-emerald-400 text-xs">{order.customer_phone}</p>
+                          {order.notes && (
+                            <p className="text-[11px] text-slate-400 italic mt-1 border-t border-slate-800/80 pt-1">
+                              "{order.notes}"
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          {order.delivery ? (
+                            <div className="p-3 bg-amber-950/40 border border-amber-600/60 rounded-xl flex items-start gap-2 text-xs">
+                              <Truck className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider block">Delivery Requested</span>
+                                <p className="text-xs text-white mt-0.5 font-medium leading-relaxed">
+                                  {order.delivery_address || "Address requested by customer"}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-2 text-xs text-slate-300">
+                              <Store className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                              <span>Customer Pickup at Storefront</span>
+                            </div>
+                          )}
+
+                          {order.customer_phone && (
+                            <a
+                              href={`https://wa.me/${order.customer_phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                `Hello ${order.customer_name}, I am ${authenticatedTenant.tenant_name}. I received your order for ${order.quantity} ${order.unit} of ${order.product_name} (${formattedTotal})${order.delivery ? ` to be delivered to ${order.delivery_address}` : ''}. Let me know if you would like me to process it right away!`
+                              )}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                            >
+                              <span>Chat with Customer on WhatsApp</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---------------- TAB: MY EARNINGS ---------------- */}
         {activeTab === "earnings" && (
           <div className="flex flex-col gap-6">
             {/* Header info */}

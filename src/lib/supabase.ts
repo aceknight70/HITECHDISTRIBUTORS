@@ -941,12 +941,32 @@ export interface HubTenantProduct {
   tenant_id: string;
   product_name: string;
   price: number | null; // nullable — "Price on request" if blank/0
+  unit?: string; // piece, cup, kg, bundle, pack, litre
   description?: string;
   photo_url?: string;
   category?: string;
   in_stock: boolean;
   date_added?: string;
   updated_at?: string;
+}
+
+export interface HubTenantOrder {
+  id: string;
+  tenant_id: string;
+  tenant_name?: string;
+  product_id?: string;
+  product_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number | null;
+  total_amount: number;
+  customer_name: string;
+  customer_phone: string;
+  delivery: boolean;
+  delivery_address?: string;
+  notes?: string;
+  status: "New" | "Processing" | "Completed";
+  created_at: string;
 }
 
 export interface HubTenantCommission {
@@ -1174,6 +1194,31 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     date_added: new Date().toISOString(),
     referral_entries: 0,
     discovery_entries: 0
+  },
+  {
+    id: "920b105b-cf8f-4397-b5d8-8de25fd42e11",
+    tenant_name: "Wealth",
+    category: "Food — Fish Products",
+    description: "Specialist supplier of quality dried crayfish, stockfish (cod/okporoko), and assorted premium fish products. Available in cups, kg, pieces, and wholesale bundles for homes, caterers, and food businesses.",
+    photos: ensure30PhotoSlots([
+      "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80",
+      "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=800&q=80"
+    ]),
+    contact_info: {
+      phone: "+2348165103607",
+      whatsapp: "+2348165103607",
+      email: "wealth.fish@hitechhub.ng"
+    },
+    invoicing_enabled: true,
+    referral_code: "WEALTHFISH01",
+    pin: "5443", // Private secret merchant PIN for Wealth
+    assigned_by: "master",
+    commission_rate: 1.0,
+    pixel_id: "",
+    status: "active",
+    date_added: "2026-10-26T11:57:08.439522+00:00",
+    referral_entries: 0,
+    discovery_entries: 0
   }
 ];
 
@@ -1231,14 +1276,15 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
     });
   }
 
-  // Guarantee that all 3 official initial tenants (Martins, Shama's Findings, Sumshi) are always present
+  // Guarantee that all official initial tenants (Martins, Shama's Findings, Sumshi, Wealth) are always present
   for (const defTenant of DEFAULT_INITIAL_TENANTS) {
     const existingIndex = list.findIndex(
       t => t.id === defTenant.id || 
            t.referral_code?.toUpperCase() === defTenant.referral_code.toUpperCase() ||
            (t.tenant_name?.toLowerCase().includes("martins") && defTenant.tenant_name.toLowerCase().includes("martins")) ||
            (t.tenant_name?.toLowerCase().includes("shama") && defTenant.tenant_name.toLowerCase().includes("shama")) ||
-           (t.tenant_name?.toLowerCase().includes("sumshi") && defTenant.tenant_name.toLowerCase().includes("sumshi"))
+           (t.tenant_name?.toLowerCase().includes("sumshi") && defTenant.tenant_name.toLowerCase().includes("sumshi")) ||
+           (t.tenant_name?.toLowerCase().includes("wealth") && defTenant.tenant_name.toLowerCase().includes("wealth"))
     );
 
     if (existingIndex === -1) {
@@ -1253,7 +1299,7 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
         referral_code: existing.referral_code === "MARTINS" ? "MARTINSQW13" : (existing.referral_code || defTenant.referral_code),
         pin: existing.pin || defTenant.pin,
         status: existing.status || "active",
-        photos: ensure30PhotoSlots(existing.photos || defTenant.photos)
+        photos: ensure30PhotoSlots(existing.photos && existing.photos.length > 0 ? existing.photos : defTenant.photos)
       };
     }
   }
@@ -1271,6 +1317,8 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
       if (!pin || pin === "1111") pin = "7139";
     } else if (t.tenant_name.toLowerCase().includes("sumshi")) {
       if (!pin || pin === "2222") pin = "9284";
+    } else if (t.tenant_name.toLowerCase().includes("wealth") || t.id === "920b105b-cf8f-4397-b5d8-8de25fd42e11") {
+      if (!pin || pin === "2832") pin = "5443";
     } else if (!pin) {
       pin = (1000 + Math.floor(Math.random() * 8999)).toString();
     }
@@ -1404,6 +1452,21 @@ export function findMatchingTenant(tenants: HubTenant[], queryCode: string): Hub
   // 5. Sumshi alias matches (SUMSHI, SUMSHIPOS, SUMSHI-POS)
   if (normalized === "SUMSHI" || normalized.startsWith("SUMSHI")) {
     match = tenants.find(t => t.tenant_name.toLowerCase().includes("sumshi") || (t.referral_code || "").toUpperCase().includes("SUMSHI"));
+    if (match) return match;
+  }
+
+  // 5b. Wealth alias matches (WEALTH, WEALTHFISH, WEALTHFISH01, CRAYFISH, STOCKFISH)
+  if (
+    normalized === "WEALTH" || 
+    normalized.startsWith("WEALTH") || 
+    normalized === "WEALTHFISH01" || 
+    normalized === "WEALTHFISH" ||
+    normalized.includes("FISH")
+  ) {
+    match = tenants.find(t => 
+      t.tenant_name.toLowerCase().includes("wealth") || 
+      (t.referral_code || "").toUpperCase().includes("WEALTH")
+    );
     if (match) return match;
   }
 
@@ -1607,11 +1670,37 @@ export const DEFAULT_TENANT_PRODUCTS: HubTenantProduct[] = [
     tenant_id: "a0000000-0000-0000-0000-000000000002",
     product_name: "Mini Solar Backup Station for POS & Routers",
     price: 85000,
+    unit: "piece",
     description: "Uninterrupted DC mini-UPS with solar panel input, keeping POS terminals, WiFi routers, and phones powered 24/7.",
     photo_url: "https://images.unsplash.com/photo-1592833159155-c62df1b65634?auto=format&fit=crop&w=600&q=80",
     category: "Solar & Power",
     in_stock: true,
     date_added: new Date().toISOString()
+  },
+  // Wealth
+  {
+    id: "7aca5e4f-602e-4e57-affa-c8218a0c422f",
+    tenant_id: "920b105b-cf8f-4397-b5d8-8de25fd42e11",
+    product_name: "Crayfish",
+    price: null, // Price on request
+    unit: "cup",
+    description: "Dried crayfish, sold by the cup. Pure, sand-free, and full of natural aroma for rich cooking.",
+    photo_url: "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=600&q=80",
+    category: "Crayfish",
+    in_stock: true,
+    date_added: "2026-10-26T11:57:08.439522+00:00"
+  },
+  {
+    id: "d792dd94-4733-4654-89b0-8cb9d0f5b8bf",
+    tenant_id: "920b105b-cf8f-4397-b5d8-8de25fd42e11",
+    product_name: "Stockfish",
+    price: null, // Price on request
+    unit: "piece",
+    description: "Dried premium stockfish (cod/okporoko). Thick-cut, deeply flavorful, and tender when cooked.",
+    photo_url: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=600&q=80",
+    category: "Stockfish",
+    in_stock: true,
+    date_added: "2026-10-26T11:57:08.439522+00:00"
   }
 ];
 
@@ -1645,6 +1734,11 @@ export async function fetchTenantProducts(tenantId?: string): Promise<HubTenantP
           (ptid.includes("shama") || ptid.includes("favour") || ptid === "2bd9900a-c315-40ab-9e26-f59b62ba2a87")) {
         return true;
       }
+      // Wealth match
+      if ((tid.includes("wealth") || tid === "920b105b-cf8f-4397-b5d8-8de25fd42e11") &&
+          (ptid.includes("wealth") || ptid === "920b105b-cf8f-4397-b5d8-8de25fd42e11")) {
+        return true;
+      }
       return false;
     });
   }
@@ -1665,6 +1759,87 @@ export async function saveTenantProduct(product: HubTenantProduct): Promise<void
   const updated = existingList.filter(p => p.id !== product.id);
   updated.push({ ...product, updated_at: new Date().toISOString() });
   await writeFallback("hublet_tenant_products_fallback", updated);
+}
+
+// -------------------------------------------------------------
+// TENANT ORDERS API
+// -------------------------------------------------------------
+export async function fetchTenantOrders(tenantId?: string): Promise<HubTenantOrder[]> {
+  let serverOrders: HubTenantOrder[] = [];
+  if (tenantId) {
+    try {
+      const res = await fetch(`/api/tenants/${tenantId}/orders`);
+      if (res.ok) {
+        serverOrders = await res.json();
+      }
+    } catch (e) {}
+  }
+
+  const fallback = ((await readFallback("hublet_tenant_orders_fallback")) as HubTenantOrder[]) || [];
+
+  const combinedMap = new Map<string, HubTenantOrder>();
+  fallback.forEach(o => combinedMap.set(o.id, o));
+  serverOrders.forEach(o => combinedMap.set(o.id, o));
+  const list = Array.from(combinedMap.values()).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  if (tenantId) {
+    return list.filter(o => o.tenant_id === tenantId);
+  }
+  return list;
+}
+
+export async function saveTenantOrder(order: Partial<HubTenantOrder> & {
+  tenant_id: string;
+  product_name: string;
+  quantity: number;
+}): Promise<HubTenantOrder> {
+  const fullOrder: HubTenantOrder = {
+    id: order.id || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    tenant_id: order.tenant_id,
+    tenant_name: order.tenant_name,
+    product_id: order.product_id,
+    product_name: order.product_name,
+    quantity: order.quantity,
+    unit: order.unit || "piece",
+    unit_price: order.unit_price ?? null,
+    total_amount: order.total_amount ?? (order.unit_price ? order.quantity * order.unit_price : 0),
+    customer_name: order.customer_name || "Customer",
+    customer_phone: order.customer_phone || "",
+    delivery: !!order.delivery,
+    delivery_address: order.delivery_address,
+    notes: order.notes,
+    status: (order.status as any) || "New",
+    created_at: order.created_at || new Date().toISOString()
+  };
+
+  // 1. Persist to server
+  try {
+    await fetch(`/api/tenants/${fullOrder.tenant_id}/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fullOrder)
+    });
+  } catch (e) {}
+
+  // 2. Persist to fallback / client_channels
+  const current = ((await readFallback("hublet_tenant_orders_fallback")) as HubTenantOrder[]) || [];
+  const updated = [fullOrder, ...current.filter(o => o.id !== fullOrder.id)];
+  await writeFallback("hublet_tenant_orders_fallback", updated);
+  return fullOrder;
+}
+
+export async function updateTenantOrderStatus(
+  orderId: string,
+  status: "New" | "Processing" | "Completed"
+): Promise<void> {
+  const current = ((await readFallback("hublet_tenant_orders_fallback")) as HubTenantOrder[]) || [];
+  const target = current.find(o => o.id === orderId);
+  if (target) {
+    target.status = status;
+    await saveTenantOrder(target);
+  }
 }
 
 export async function deleteTenantProduct(productId: string): Promise<void> {
