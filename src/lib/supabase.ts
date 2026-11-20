@@ -925,7 +925,6 @@ export interface HubTenant {
   };
   invoicing_enabled: boolean;
   referral_code: string;
-  pin?: string; // Direct access PIN (e.g. 4444 for Favour Atigolo) - No password needed
   assigned_by?: string; // 'master' | 'manager'
   commission_rate?: number; // e.g. 1.00
   pixel_id?: string;
@@ -1136,7 +1135,6 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "MARTINSQW13",
-    pin: "7139", // Private secret merchant PIN
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1161,7 +1159,6 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "SHAMASFINDINGS01",
-    pin: "4444", // Private secret merchant PIN for Favour Atigolo
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1186,7 +1183,6 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "SUMSHI",
-    pin: "9284", // Private secret merchant PIN
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1211,7 +1207,6 @@ export const DEFAULT_INITIAL_TENANTS: HubTenant[] = [
     },
     invoicing_enabled: true,
     referral_code: "WEALTHFISH01",
-    pin: "5443", // Private secret merchant PIN for Wealth
     assigned_by: "master",
     commission_rate: 1.0,
     pixel_id: "",
@@ -1297,37 +1292,19 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
         ...existing,
         // If it was the old "MARTINS" code, upgrade to official MARTINSQW13
         referral_code: existing.referral_code === "MARTINS" ? "MARTINSQW13" : (existing.referral_code || defTenant.referral_code),
-        pin: existing.pin || defTenant.pin,
         status: existing.status || "active",
         photos: ensure30PhotoSlots(existing.photos && existing.photos.length > 0 ? existing.photos : defTenant.photos)
       };
     }
   }
 
-  // Ensure every tenant has all 30 photo slots pre-filled and unique private secret PINs
+  // Ensure every tenant has all 30 photo slots pre-filled and NEVER holds plain-text PINs
   const processed = list.map(t => {
-    let pin = t.pin;
-    if (
-      t.id === "2bd9900a-c315-40ab-9e26-f59b62ba2a87" ||
-      t.tenant_name.toLowerCase().includes("favour") ||
-      t.tenant_name.toLowerCase().includes("shama")
-    ) {
-      pin = "4444"; // Always preserve 4444 for Favour Atigolo
-    } else if (t.tenant_name.toLowerCase().includes("martins")) {
-      if (!pin || pin === "1111") pin = "7139";
-    } else if (t.tenant_name.toLowerCase().includes("sumshi")) {
-      if (!pin || pin === "2222") pin = "9284";
-    } else if (t.tenant_name.toLowerCase().includes("wealth") || t.id === "920b105b-cf8f-4397-b5d8-8de25fd42e11") {
-      if (!pin || pin === "2832") pin = "5443";
-    } else if (!pin) {
-      pin = (1000 + Math.floor(Math.random() * 8999)).toString();
-    }
-
+    const { pin: _pin, pin_hash: _pinHash, ...safeTenant } = t as any;
     return {
-      ...t,
-      pin,
-      photos: ensure30PhotoSlots(t.photos)
-    };
+      ...safeTenant,
+      photos: ensure30PhotoSlots(safeTenant.photos)
+    } as HubTenant;
   });
 
   // Sync to fallback & localStorage in background
@@ -1337,9 +1314,10 @@ export async function fetchHubTenants(): Promise<HubTenant[]> {
 }
 
 export async function saveHubTenant(tenant: HubTenant) {
+  const { pin: _pin, pin_hash: _pinHash, ...cleanTenant } = tenant as any;
   const sanitizedTenant = {
-    ...tenant,
-    photos: ensure30PhotoSlots(tenant.photos)
+    ...cleanTenant,
+    photos: ensure30PhotoSlots(cleanTenant.photos)
   };
 
   // 1. Immediately persist to localStorage/fallback cache so no UI edits are lost
@@ -1481,69 +1459,276 @@ export function findMatchingTenant(tenants: HubTenant[], queryCode: string): Hub
   return undefined;
 }
 
-// Strict Authentication for Tenant Edit Workspace
-// Requires secret private PIN. Rejects public referral codes and brand aliases to prevent unauthorized editing.
-export function authenticateTenantWithPin(
-  tenants: HubTenant[],
-  enteredPin: string,
-  targetTenantId?: string
-): { success: boolean; tenant?: HubTenant; error?: string } {
-  if (!enteredPin || !enteredPin.trim()) {
-    return { success: false, error: "Please enter your secret 4-digit PIN." };
-  }
+// -------------------------------------------------------------
+// SERVER-SIDE AUTHENTICATION & SESSION HELPERS (SUPABASE RPC)
+// -------------------------------------------------------------
 
-  const cleanPin = enteredPin.trim();
+export interface HiTechSession {
+  id: string;
+  code: string;
+  name: string;
+  role: string;
+}
 
-  // If unlocking a specific merchant's storefront (e.g. Favour Atigolo's storefront)
-  if (targetTenantId) {
-    const target = tenants.find(t => t.id === targetTenantId);
-    if (!target) {
-      return { success: false, error: "Merchant storefront record not found." };
-    }
+export const HITECH_SESSION_KEY = "hitech_session";
 
-    // Check if the user entered a public referral code instead of a PIN
-    if (target.referral_code && cleanPin.toUpperCase() === target.referral_code.toUpperCase()) {
+export function getHiTechSession(): HiTechSession | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.sessionStorage.getItem(HITECH_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.id && parsed.code && parsed.name && parsed.role) {
       return {
-        success: false,
-        error: `"${cleanPin}" is a public referral code. To edit and manage this storefront, you must enter your private secret PIN.`
+        id: String(parsed.id),
+        code: String(parsed.code),
+        name: String(parsed.name),
+        role: String(parsed.role),
       };
     }
+  } catch (e) {}
+  return null;
+}
 
-    // Strict PIN check against this specific merchant
-    if (target.pin && target.pin.trim() === cleanPin) {
-      return { success: true, tenant: target };
+export function setHiTechSession(session: HiTechSession | null): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (!session) {
+      window.sessionStorage.removeItem(HITECH_SESSION_KEY);
+    } else {
+      // Strictly persist only { id, code, name, role } — never any PIN
+      window.sessionStorage.setItem(
+        HITECH_SESSION_KEY,
+        JSON.stringify({
+          id: session.id,
+          code: session.code,
+          name: session.name,
+          role: session.role,
+        })
+      );
     }
+  } catch (e) {}
+}
 
-    return { success: false, error: "Incorrect PIN for this storefront. Access denied." };
-  }
+/**
+ * Single helper exposing the logged-in person's id, code, and name
+ * for screens such as the Customer Question Log.
+ */
+export function getLoggedInPerson(): { id: string; code: string; name: string; role: string } | null {
+  return getHiTechSession();
+}
 
-  // Global Merchant Login (no target tenant preselected)
-  // Check if user entered a known public referral code instead of a PIN
-  const matchedByCode = tenants.find(
-    t => t.referral_code?.toUpperCase() === cleanPin.toUpperCase()
-  );
-  if (matchedByCode) {
+export interface HiTechLoginResult {
+  ok: boolean;
+  id?: string;
+  code?: string;
+  name?: string;
+  role?: string;
+  message?: string;
+  locked?: boolean;
+  locked_until?: string | null;
+}
+
+export interface HiTechRpcResult {
+  ok: boolean;
+  message?: string;
+}
+
+export interface HiTechPersonRecord {
+  id: string;
+  code: string;
+  name: string;
+  role: string;
+  active: boolean;
+  last_login_at?: string | null;
+}
+
+export interface HiTechListPeopleResult {
+  ok: boolean;
+  message?: string;
+  people?: HiTechPersonRecord[];
+}
+
+export interface HiTechTenantLoginResult {
+  ok: boolean;
+  tenant_id?: string;
+  tenant_name?: string;
+  message?: string;
+  locked?: boolean;
+  locked_until?: string | null;
+}
+
+function normalizeRpcResponse<T>(data: any, error: any): T {
+  if (error) {
     return {
-      success: false,
-      error: `"${cleanPin}" is a public customer referral code. To access merchant edit mode, please enter your private secret PIN.`
-    };
+      ok: false,
+      message: error.message || "Request failed. Please try again.",
+    } as unknown as T;
   }
-
-  // Strict PIN matching across active tenants
-  const matchedTenants = tenants.filter(
-    t => t.status === "active" && t.pin && t.pin.trim() === cleanPin
-  );
-
-  if (matchedTenants.length === 1) {
-    return { success: true, tenant: matchedTenants[0] };
-  } else if (matchedTenants.length > 1) {
+  const parsed = Array.isArray(data) ? data[0] : data;
+  if (!parsed || typeof parsed !== "object") {
     return {
-      success: false,
-      error: "Multiple merchants match this PIN. Please open your specific storefront to log in."
-    };
+      ok: false,
+      message: "Unexpected response from server.",
+    } as unknown as T;
   }
+  return parsed as T;
+}
 
-  return { success: false, error: "Invalid PIN. Access denied." };
+export async function hitechLogin(p_code: string, p_pin: string): Promise<HiTechLoginResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_login", {
+      p_code: p_code.trim(),
+      p_pin: p_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechLoginResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to reach login service." };
+  }
+}
+
+export async function hitechChangePin(
+  p_code: string,
+  p_old_pin: string,
+  p_new_pin: string
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_change_pin", {
+      p_code: p_code.trim(),
+      p_old_pin: p_old_pin.trim(),
+      p_new_pin: p_new_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to change PIN." };
+  }
+}
+
+export async function hitechAdminAddPerson(
+  p_admin_code: string,
+  p_admin_pin: string,
+  p_name: string,
+  p_code: string,
+  p_role: string,
+  p_pin: string
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_admin_add_person", {
+      p_admin_code: p_admin_code.trim(),
+      p_admin_pin: p_admin_pin.trim(),
+      p_name: p_name.trim(),
+      p_code: p_code.trim(),
+      p_role: p_role.trim(),
+      p_pin: p_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to add person." };
+  }
+}
+
+export async function hitechAdminResetPin(
+  p_admin_code: string,
+  p_admin_pin: string,
+  p_target_code: string,
+  p_new_pin: string
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_admin_reset_pin", {
+      p_admin_code: p_admin_code.trim(),
+      p_admin_pin: p_admin_pin.trim(),
+      p_target_code: p_target_code.trim(),
+      p_new_pin: p_new_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to reset PIN." };
+  }
+}
+
+export async function hitechAdminListPeople(
+  p_admin_code: string,
+  p_admin_pin: string
+): Promise<HiTechListPeopleResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_admin_list_people", {
+      p_admin_code: p_admin_code.trim(),
+      p_admin_pin: p_admin_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechListPeopleResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to list people." };
+  }
+}
+
+export async function hitechAdminSetActive(
+  p_admin_code: string,
+  p_admin_pin: string,
+  p_target_code: string,
+  p_active: boolean
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_admin_set_active", {
+      p_admin_code: p_admin_code.trim(),
+      p_admin_pin: p_admin_pin.trim(),
+      p_target_code: p_target_code.trim(),
+      p_active,
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to update account status." };
+  }
+}
+
+export async function hitechTenantLogin(
+  p_referral_code: string,
+  p_pin: string
+): Promise<HiTechTenantLoginResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_tenant_login", {
+      p_referral_code: p_referral_code.trim(),
+      p_pin: p_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechTenantLoginResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to verify tenant PIN." };
+  }
+}
+
+export async function hitechChangeTenantPin(
+  p_referral_code: string,
+  p_old_pin: string,
+  p_new_pin: string
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_change_tenant_pin", {
+      p_referral_code: p_referral_code.trim(),
+      p_old_pin: p_old_pin.trim(),
+      p_new_pin: p_new_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to change tenant PIN." };
+  }
+}
+
+export async function hitechAdminSetTenantPin(
+  p_admin_code: string,
+  p_admin_pin: string,
+  p_referral_code: string,
+  p_new_pin: string
+): Promise<HiTechRpcResult> {
+  try {
+    const { data, error } = await supabase.rpc("hitech_admin_set_tenant_pin", {
+      p_admin_code: p_admin_code.trim(),
+      p_admin_pin: p_admin_pin.trim(),
+      p_referral_code: p_referral_code.trim(),
+      p_new_pin: p_new_pin.trim(),
+    });
+    return normalizeRpcResponse<HiTechRpcResult>(data, error);
+  } catch (err: any) {
+    return { ok: false, message: err?.message || "Unable to set tenant PIN." };
+  }
 }
 
 export async function logAllyReferral(ally_id: string, referral_code: string) {

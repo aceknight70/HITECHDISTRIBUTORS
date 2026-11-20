@@ -61,10 +61,14 @@ import {
   Moon,
   Users,
   Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle, Share2, Link,
-  Truck, Key
+  Truck, Key, LogOut
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
+import ManagerPeopleSection from "./components/ManagerPeopleSection";
+import ChangeMyPinModal from "./components/ChangeMyPinModal";
+import AdminReAuthDialog from "./components/AdminReAuthDialog";
+import LockoutCountdownBanner, { useLockoutRemainingSeconds } from "./components/LockoutCountdownBanner";
 import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, findMatchingTenant, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, HubTenantOrder, MasterTenantNotification } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
@@ -993,6 +997,19 @@ export default function App() {
   const [compareSearch1, setCompareSearch1] = useState("");
   const [compareSearch2, setCompareSearch2] = useState("");
 
+  // Unified Staff / Manager / Master session (no PIN ever stored)
+  const [hitechSession, setHitechSession] = useState<db.HiTechSession | null>(() => db.getHiTechSession());
+  const updateHiTechSession = (next: db.HiTechSession | null) => {
+    db.setHiTechSession(next);
+    setHitechSession(next);
+  };
+  const staffIsLoggedIn = Boolean(
+    hitechSession && ["staff", "manager", "master"].includes((hitechSession.role || "").toLowerCase())
+  );
+  const managerIsLoggedIn = Boolean(
+    hitechSession && ["manager", "master"].includes((hitechSession.role || "").toLowerCase())
+  );
+
   // Manager Hub State
   const [partnerAds, setPartnerAds] = useState<Record<string, boolean>>({
     hp: true,
@@ -1001,10 +1018,14 @@ export default function App() {
     apc: true,
     felicity: true
   });
-  const [managerPIN, setManagerPIN] = useState("");
-  const [managerIsLoggedIn, setManagerIsLoggedIn] = useState(false);
+  const [managerLoginCode, setManagerLoginCode] = useState("");
+  const [managerLoginPin, setManagerLoginPin] = useState("");
   const [managerError, setManagerError] = useState("");
-  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ally" | "tenant" | "manage-staff" | "sheets" | "store-settings">("menu");
+  const [managerLockedUntil, setManagerLockedUntil] = useState<string | null>(null);
+  const [managerLoginLoading, setManagerLoginLoading] = useState(false);
+  const managerLockRemaining = useLockoutRemainingSeconds(managerLockedUntil, () => setManagerLockedUntil(null));
+  const [showChangeMyPinModal, setShowChangeMyPinModal] = useState(false);
+  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ally" | "tenant" | "people" | "manage-staff" | "sheets" | "store-settings">("menu");
 
   const [hubAllies, setHubAllies] = useState<HubAlly[]>([]);
   const [hubTenants, setHubTenants] = useState<HubTenant[]>([]);
@@ -1049,7 +1070,11 @@ export default function App() {
   const [orderSuccessNotice, setOrderSuccessNotice] = useState<string | null>(null);
   const [placedOrderReference, setPlacedOrderReference] = useState<string | null>(null);
   const [masterEditingPinTenant, setMasterEditingPinTenant] = useState<HubTenant | null>(null);
-  const [masterNewPin, setMasterNewPin] = useState("");
+  const [tenantPinFirst, setTenantPinFirst] = useState("");
+  const [tenantPinConfirm, setTenantPinConfirm] = useState("");
+  const [tenantPinModalError, setTenantPinModalError] = useState("");
+  const [pendingManagerTenantPinSet, setPendingManagerTenantPinSet] = useState<{ referralCode: string; tenantName: string; newPin: string } | null>(null);
+  const [tenantPinNotice, setTenantPinNotice] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Customer session memory: remember which tenant the customer entered through for the whole session
   const [enteredTenant, setEnteredTenant] = useState<HubTenant | null>(null);
@@ -1493,9 +1518,12 @@ export default function App() {
   const [schSuccess, setSchSuccess] = useState<string | null>(null);
 
   // Staff Room state
-  const [staffPIN, setStaffPIN] = useState("");
-  const [staffIsLoggedIn, setStaffIsLoggedIn] = useState(false);
+  const [staffLoginCode, setStaffLoginCode] = useState("");
+  const [staffLoginPin, setStaffLoginPin] = useState("");
   const [staffError, setStaffError] = useState("");
+  const [staffLockedUntil, setStaffLockedUntil] = useState<string | null>(null);
+  const [staffLoginLoading, setStaffLoginLoading] = useState(false);
+  const staffLockRemaining = useLockoutRemainingSeconds(staffLockedUntil, () => setStaffLockedUntil(null));
   const [csvText, setCsvText] = useState("");
   const [csvStatus, setCsvStatus] = useState("");
   const [sheetSearch, setSheetSearch] = useState("");
@@ -2675,24 +2703,87 @@ Issue: ${escDesc}`;
     setSubmittingSch(false);
   };
 
-  // Staff Room login authentication
+  // Staff Room login authentication (server-side via Supabase RPC)
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStaffError("");
-    if (staffPIN === "12345" || staffPIN === "qw123#@") {
-      setStaffIsLoggedIn(true);
-    } else {
-      setStaffError("Invalid Access PIN or Manager Key.");
+    const codeVal = staffLoginCode.trim().toUpperCase();
+    const pinVal = staffLoginPin.trim();
+    // Clear PIN from state immediately before making RPC request
+    setStaffLoginPin("");
+
+    if (!codeVal || !pinVal) {
+      setStaffError("Please enter your Staff ID and PIN.");
+      return;
+    }
+
+    setStaffLoginLoading(true);
+    try {
+      const res = await db.hitechLogin(codeVal, pinVal);
+      if (!res.ok) {
+        setStaffError(res.message || "Authentication failed.");
+        setStaffLockedUntil(res.locked ? (res.locked_until || null) : null);
+        return;
+      }
+      const roleLower = (res.role || "").toLowerCase();
+      if (!["staff", "manager", "master"].includes(roleLower)) {
+        setStaffError("Access denied. Staff, Manager, or Master role required.");
+        setStaffLockedUntil(null);
+        return;
+      }
+      updateHiTechSession({
+        id: res.id || "",
+        code: res.code || codeVal,
+        name: res.name || codeVal,
+        role: res.role || "staff",
+      });
+      setStaffLoginCode("");
+      setStaffError("");
+      setStaffLockedUntil(null);
+    } finally {
+      setStaffLoginLoading(false);
     }
   };
 
+  // Manager Hub login authentication (server-side via Supabase RPC; manager & master only)
   const handleManagerLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setManagerError("");
-    if (managerPIN === "admin" || managerPIN === "0000") {
-      setManagerIsLoggedIn(true);
-    } else {
-      setManagerError("Invalid Manager PIN.");
+    const codeVal = managerLoginCode.trim().toUpperCase();
+    const pinVal = managerLoginPin.trim();
+    // Clear PIN from state immediately before making RPC request
+    setManagerLoginPin("");
+
+    if (!codeVal || !pinVal) {
+      setManagerError("Please enter your Staff ID and PIN.");
+      return;
+    }
+
+    setManagerLoginLoading(true);
+    try {
+      const res = await db.hitechLogin(codeVal, pinVal);
+      if (!res.ok) {
+        setManagerError(res.message || "Authentication failed.");
+        setManagerLockedUntil(res.locked ? (res.locked_until || null) : null);
+        return;
+      }
+      const roleLower = (res.role || "").toLowerCase();
+      if (!["manager", "master"].includes(roleLower)) {
+        setManagerError("Access denied. Manager or Master role is required.");
+        setManagerLockedUntil(null);
+        return;
+      }
+      updateHiTechSession({
+        id: res.id || "",
+        code: res.code || codeVal,
+        name: res.name || codeVal,
+        role: res.role || "manager",
+      });
+      setManagerLoginCode("");
+      setManagerError("");
+      setManagerLockedUntil(null);
+    } finally {
+      setManagerLoginLoading(false);
     }
   };
 
@@ -5245,7 +5336,7 @@ Issue: ${escDesc}`;
             {/* Master Room */}
             {currentRoom === "master" && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <MasterSection />
+                <MasterSection session={hitechSession} onSessionChange={updateHiTechSession} />
               </motion.div>
             )}
 
@@ -5262,25 +5353,73 @@ Issue: ${escDesc}`;
 
                 {!managerIsLoggedIn ? (
                   <form onSubmit={handleManagerLogin} className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Manager PIN</p>
-                    <input
-                      type="password"
-                      placeholder="Enter Manager PIN"
-                      value={managerPIN}
-                      onChange={(e) => setManagerPIN(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-3 outline-none text-center font-mono tracking-widest text-lg"
-                    />
-                    {managerError && <p className="text-xs text-red-500 font-mono text-center">{managerError}</p>}
-                    <button type="submit" className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-bold text-white uppercase tracking-wider">
-                      Unlock Manager Hub →
+                    <div>
+                      <label className="block text-[10px] text-slate-300 uppercase tracking-wider font-mono mb-1">Staff ID</label>
+                      <input
+                        type="text"
+                        autoComplete="username"
+                        placeholder="e.g. HTD-003"
+                        value={managerLoginCode}
+                        onChange={(e) => {
+                          setManagerLoginCode(e.target.value.toUpperCase());
+                          setManagerError("");
+                        }}
+                        className="w-full bg-white border border-slate-300 text-sm text-slate-900 rounded-lg p-3 outline-none font-mono uppercase focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-300 uppercase tracking-wider font-mono mb-1">PIN</label>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="Enter PIN"
+                        value={managerLoginPin}
+                        onChange={(e) => {
+                          setManagerLoginPin(e.target.value);
+                          setManagerError("");
+                        }}
+                        className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-3 outline-none text-center font-mono tracking-widest text-lg focus:ring-2 focus:ring-emerald-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                    {managerLockedUntil ? (
+                      <LockoutCountdownBanner
+                        lockedUntil={managerLockedUntil}
+                        message={managerError}
+                        onExpired={() => setManagerLockedUntil(null)}
+                      />
+                    ) : (
+                      managerError && <p className="text-xs text-red-400 font-mono text-center">{managerError}</p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={managerLoginLoading || managerLockRemaining > 0}
+                      className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 rounded-lg text-xs font-bold text-white uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      {managerLoginLoading ? "Verifying..." : managerLockRemaining > 0 ? "Locked" : "Unlock Manager Hub →"}
                     </button>
-                    <p className="text-[10px] text-slate-500 text-center mt-1">Hint: Try 'admin' or '0000'</p>
                   </form>
                 ) : (
                   <div className="flex flex-col gap-4">
-                    <div className="flex justify-between items-center p-3 bg-slate-900 border border-[var(--border)] rounded-xl">
-                      <span className="font-bold text-emerald-400 font-mono text-xs">Logged In: MANAGER</span>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 p-3 bg-slate-900 border border-[var(--border)] rounded-xl">
+                      <div>
+                        <span className="font-bold text-emerald-400 font-mono text-xs block">
+                          Welcome, {hitechSession?.name || "Manager"}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase">
+                          {hitechSession?.code} • {hitechSession?.role}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowChangeMyPinModal(true)}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                        >
+                          <Key className="w-3.5 h-3.5" />
+                          <span>Change my PIN</span>
+                        </button>
                         <button
                           onClick={() => {
                             const mainUrl = window.location.origin + "/";
@@ -5294,7 +5433,18 @@ Issue: ${escDesc}`;
                           <Link className="w-3.5 h-3.5" />
                           <span>{copiedMainShowroomLink ? "Showroom Link Copied! ✓" : "Copy Main Showroom Link"}</span>
                         </button>
-                        <button onClick={() => {setManagerIsLoggedIn(false); setActiveManagerTab("menu");}} className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase cursor-pointer">Logout</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateHiTechSession(null);
+                            setActiveManagerTab("menu");
+                            setManagerError("");
+                          }}
+                          className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          <span>Log out</span>
+                        </button>
                       </div>
                     </div>
 
@@ -5312,6 +5462,13 @@ Issue: ${escDesc}`;
                           <div>
                             <h4 className="font-bold text-[11px] text-white uppercase">HubTenant</h4>
                             <p className="text-[9px] text-[var(--mu)] mt-0.5">Manage Tenant Spaces</p>
+                          </div>
+                        </button>
+                        <button onClick={() => setActiveManagerTab("people")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors cursor-pointer">
+                          <Users className="w-6 h-6 text-purple-400" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">People</h4>
+                            <p className="text-[9px] text-[var(--mu)] mt-0.5">Staff Accounts &amp; PINs</p>
                           </div>
                         </button>
                         <button onClick={() => setActiveManagerTab("manage-staff")} className="p-4 bg-[var(--dk2)] border border-[var(--border)] rounded-xl flex flex-col gap-2 items-center text-center hover:bg-slate-800 transition-colors">
@@ -5692,10 +5849,12 @@ Issue: ${escDesc}`;
                                   <button
                                     onClick={() => {
                                       setMasterEditingPinTenant(tenant);
-                                      setMasterNewPin("");
+                                      setTenantPinFirst("");
+                                      setTenantPinConfirm("");
+                                      setTenantPinModalError("");
                                     }}
                                     className="px-2 py-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 rounded text-[10px] font-bold flex items-center gap-1 border border-amber-800/80 cursor-pointer"
-                                    title="Set Tenant 4-digit PIN"
+                                    title="Set Tenant PIN"
                                   >
                                     <Key className="w-3 h-3 text-amber-400" />
                                     <span>PIN</span>
@@ -5783,7 +5942,18 @@ Issue: ${escDesc}`;
                             </div>
                           )}
                         </div>
+                        {/* Tenant PIN Action Feedback */}
+                        {tenantPinNotice && (
+                          <div className={`p-3 rounded-xl text-xs font-mono flex items-center justify-between border ${tenantPinNotice.ok ? "bg-emerald-950/90 border-emerald-700 text-emerald-200" : "bg-red-950/90 border-red-700 text-red-200"}`}>
+                            <span>{tenantPinNotice.message}</span>
+                            <button type="button" onClick={() => setTenantPinNotice(null)} className="text-slate-300 hover:text-white ml-2 cursor-pointer">✕</button>
+                          </div>
+                        )}
                       </div>
+                    )}
+
+                    {activeManagerTab === "people" && hitechSession && (
+                      <ManagerPeopleSection session={hitechSession} onBack={() => setActiveManagerTab("menu")} />
                     )}
 
                     {activeManagerTab === "manage-staff" && (<ManagerManageStaff onBack={() => setActiveManagerTab("menu")} />)}
@@ -5992,28 +6162,86 @@ Issue: ${escDesc}`;
 
                 {!staffIsLoggedIn ? (
                   <form onSubmit={handleStaffLogin} className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)] flex flex-col gap-3">
-                    <p className="text-[10px] text-[var(--mu)] uppercase tracking-wider font-mono">Authentication PIN</p>
-                    <input
-                      type="password"
-                      placeholder="Enter 5-digit Staff PIN"
-                      value={staffPIN}
-                      onChange={(e) => setStaffPIN(e.target.value)}
-                      className="bg-slate-950 border border-slate-800 text-xs text-[var(--cr)] rounded-lg p-3 outline-none text-center font-mono tracking-widest text-lg"
-                    />
-                    {staffError && <p className="text-xs text-red-500 font-mono text-center">{staffError}</p>}
-                    <button type="submit" className="w-full py-3 bg-[var(--bl)] hover:bg-blue-600 rounded-lg text-xs font-bold text-white uppercase tracking-wider">
-                      Unlock Portal →
+                    <div>
+                      <label className="block text-[10px] text-slate-300 uppercase tracking-wider font-mono mb-1">Staff ID</label>
+                      <input
+                        type="text"
+                        autoComplete="username"
+                        placeholder="e.g. HTD-031"
+                        value={staffLoginCode}
+                        onChange={(e) => {
+                          setStaffLoginCode(e.target.value.toUpperCase());
+                          setStaffError("");
+                        }}
+                        className="w-full bg-white border border-slate-300 text-sm text-slate-900 rounded-lg p-3 outline-none font-mono uppercase focus:ring-2 focus:ring-blue-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-300 uppercase tracking-wider font-mono mb-1">PIN</label>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="Enter your PIN"
+                        value={staffLoginPin}
+                        onChange={(e) => {
+                          setStaffLoginPin(e.target.value);
+                          setStaffError("");
+                        }}
+                        className="w-full bg-white border border-slate-300 text-slate-900 rounded-lg p-3 outline-none text-center font-mono tracking-widest text-lg focus:ring-2 focus:ring-blue-500"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                    {staffLockedUntil ? (
+                      <LockoutCountdownBanner
+                        lockedUntil={staffLockedUntil}
+                        message={staffError}
+                        onExpired={() => setStaffLockedUntil(null)}
+                      />
+                    ) : (
+                      staffError && <p className="text-xs text-red-400 font-mono text-center">{staffError}</p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={staffLoginLoading || staffLockRemaining > 0}
+                      className="w-full py-3 bg-[var(--bl)] hover:bg-blue-600 disabled:opacity-50 rounded-lg text-xs font-bold text-white uppercase tracking-wider cursor-pointer transition-colors"
+                    >
+                      {staffLoginLoading ? "Verifying..." : staffLockRemaining > 0 ? "Locked" : "Unlock Portal →"}
                     </button>
-                    <p className="text-[10px] text-slate-500 text-center mt-1">Hint: Try standard PIN 12345 or Key qw123#@</p>
                   </form>
                 ) : (
                   <div className="flex flex-col gap-4">
                     {/* Logged in tools */}
-                    <div className="p-3 bg-slate-900 border border-[var(--border)] rounded-xl flex justify-between items-center text-xs">
-                      <span className="font-bold text-slate-300 font-mono">Welcome Operational Team</span>
-                      <button onClick={() => setStaffIsLoggedIn(false)} className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase">
-                        Log out
-                      </button>
+                    <div className="p-3 bg-slate-900 border border-[var(--border)] rounded-xl flex flex-wrap justify-between items-center gap-2 text-xs">
+                      <div>
+                        <span className="font-bold text-emerald-400 font-mono block">
+                          Welcome, {hitechSession?.name || "Staff"}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase">
+                          {hitechSession?.code} • {hitechSession?.role}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowChangeMyPinModal(true)}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                        >
+                          <Key className="w-3 h-3" />
+                          <span>Change my PIN</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateHiTechSession(null);
+                            setStaffError("");
+                          }}
+                          className="px-2.5 py-1.5 bg-red-950/40 text-red-400 border border-red-900/60 rounded text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          <span>Log out</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Dynamic Preset Switch */}
@@ -8513,12 +8741,17 @@ Issue: ${escDesc}`;
         </div>
       )}
 
-      {/* Master Section: Tenant PIN Management Modal */}
+      {/* Manager / Master Security: Tenant PIN Management Modal (server-side RPC with re-auth) */}
       {masterEditingPinTenant && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full text-slate-100 shadow-2xl relative">
             <button
-              onClick={() => setMasterEditingPinTenant(null)}
+              onClick={() => {
+                setMasterEditingPinTenant(null);
+                setTenantPinFirst("");
+                setTenantPinConfirm("");
+                setTenantPinModalError("");
+              }}
               className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -8526,29 +8759,54 @@ Issue: ${escDesc}`;
 
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-2">
               <Key className="w-4 h-4" />
-              <span>Master Security &bull; Set Tenant PIN</span>
+              <span>Set Tenant PIN</span>
             </div>
 
             <h3 className="text-lg font-bold text-white">
               {masterEditingPinTenant.tenant_name}
             </h3>
             <p className="text-xs text-slate-400 mt-1 mb-5">
-              Set or update the private 4-digit PIN for self-service access. This PIN gives the merchant access to their own Gallery, Products, Orders and Earnings only.
+              Set or reset the private Owner Access PIN for this storefront. Existing PINs cannot be viewed.
             </p>
 
-            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 mb-5">
-              <label className="text-xs font-bold text-slate-300">
-                New 4-Digit PIN
-              </label>
-              <input
-                type="text"
-                maxLength={4}
-                value={masterNewPin}
-                onChange={(e) => setMasterNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="Enter new 4-digit PIN"
-                className="w-full px-4 py-3 rounded-xl border border-slate-300 text-slate-900 font-mono font-bold text-center text-xl tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
-                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-              />
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  New PIN
+                </label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={tenantPinFirst}
+                  onChange={(e) => {
+                    setTenantPinFirst(e.target.value);
+                    setTenantPinModalError("");
+                  }}
+                  placeholder="Enter new PIN"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-mono font-bold text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Confirm New PIN
+                </label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={tenantPinConfirm}
+                  onChange={(e) => {
+                    setTenantPinConfirm(e.target.value);
+                    setTenantPinModalError("");
+                  }}
+                  placeholder="Re-enter new PIN"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-mono font-bold text-center text-lg tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                />
+              </div>
+              {tenantPinModalError && (
+                <p className="text-xs text-red-400 font-mono">{tenantPinModalError}</p>
+              )}
               <p className="text-[11px] text-slate-500">
                 Tenant code: <span className="font-mono text-slate-300">{masterEditingPinTenant.referral_code}</span>
               </p>
@@ -8556,25 +8814,41 @@ Issue: ${escDesc}`;
 
             <div className="flex gap-3">
               <button
-                disabled={masterNewPin.length !== 4}
-                onClick={async () => {
-                  try {
-                    const updated = { ...masterEditingPinTenant, pin: masterNewPin };
-                    await saveHubTenant(updated);
-                    setHubTenants(await fetchHubTenants());
-                    alert(`PIN for ${masterEditingPinTenant.tenant_name} updated successfully.`);
-                    setMasterEditingPinTenant(null);
-                  } catch (err) {
-                    console.error("Failed to update PIN:", err);
-                    alert("Failed to update PIN.");
+                type="button"
+                onClick={() => {
+                  if (!tenantPinFirst.trim() || !tenantPinConfirm.trim()) {
+                    setTenantPinModalError("Please enter the new PIN twice.");
+                    return;
                   }
+                  if (tenantPinFirst.trim() !== tenantPinConfirm.trim()) {
+                    setTenantPinModalError("New PIN entries do not match.");
+                    return;
+                  }
+                  const pinToSet = tenantPinFirst.trim();
+                  const targetRef = masterEditingPinTenant.referral_code;
+                  const targetName = masterEditingPinTenant.tenant_name;
+                  setTenantPinFirst("");
+                  setTenantPinConfirm("");
+                  setTenantPinModalError("");
+                  setMasterEditingPinTenant(null);
+                  setPendingManagerTenantPinSet({
+                    referralCode: targetRef,
+                    tenantName: targetName,
+                    newPin: pinToSet,
+                  });
                 }}
-                className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
               >
-                Save PIN
+                Continue
               </button>
               <button
-                onClick={() => setMasterEditingPinTenant(null)}
+                type="button"
+                onClick={() => {
+                  setMasterEditingPinTenant(null);
+                  setTenantPinFirst("");
+                  setTenantPinConfirm("");
+                  setTenantPinModalError("");
+                }}
                 className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
@@ -8583,6 +8857,35 @@ Issue: ${escDesc}`;
           </div>
         </div>
       )}
+
+      {showChangeMyPinModal && hitechSession && (
+        <ChangeMyPinModal
+          personCode={hitechSession.code}
+          personName={hitechSession.name}
+          onClose={() => setShowChangeMyPinModal(false)}
+        />
+      )}
+
+      <AdminReAuthDialog
+        isOpen={pendingManagerTenantPinSet !== null}
+        title={pendingManagerTenantPinSet ? `Set PIN for ${pendingManagerTenantPinSet.tenantName}` : "Confirm Identity"}
+        onCancel={() => setPendingManagerTenantPinSet(null)}
+        onConfirm={async (adminCode, adminPin) => {
+          const payload = pendingManagerTenantPinSet;
+          setPendingManagerTenantPinSet(null);
+          if (!payload) return;
+          const res = await db.hitechAdminSetTenantPin(
+            adminCode,
+            adminPin,
+            payload.referralCode,
+            payload.newPin
+          );
+          setTenantPinNotice({
+            ok: Boolean(res.ok),
+            message: res.message || (res.ok ? `PIN updated for ${payload.tenantName}.` : "Failed to update tenant PIN."),
+          });
+        }}
+      />
     </div>
     </>
   );

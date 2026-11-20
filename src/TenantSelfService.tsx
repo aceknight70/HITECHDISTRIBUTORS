@@ -25,11 +25,13 @@ import {
   Link,
   ShoppingCart,
   CheckCircle2,
-  Truck
+  Truck,
+  Key
 } from "lucide-react";
 import * as db from "./lib/supabase";
 import { HubTenant, HubTenantProduct, HubTenantCommission, HubTenantOrder, uploadToSupabaseStorage, DEFAULT_30_SLOT_MOCKUPS } from "./lib/supabase";
 import TenantPhotoLightbox from "./components/TenantPhotoLightbox";
+import LockoutCountdownBanner, { useLockoutRemainingSeconds } from "./components/LockoutCountdownBanner";
 
 interface TenantSelfServiceProps {
   initialTenant?: HubTenant | null;
@@ -67,31 +69,11 @@ export default function TenantSelfService({
   const [isVerifying, setIsVerifying] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
 
-  // Rate Limiting & Lockout after 5 failed attempts (5-minute security timeout)
-  const [lockoutRemainingSecs, setLockoutRemainingSecs] = useState<number>(0);
-  const [failedAttempts, setFailedAttempts] = useState<number>(0);
+  // Server-enforced lockout timestamp returned by hitech_tenant_login
+  const [lockedUntil, setLockedUntil] = useState<string | null>(null);
+  const lockoutRemainingSecs = useLockoutRemainingSeconds(lockedUntil, () => setLockedUntil(null));
 
-  // Check lockout on mount and active interval
-  useEffect(() => {
-    const lockoutKey = targetTenant ? `hitech_pin_lockout_${targetTenant.id}` : 'hitech_pin_lockout_global';
-    const checkLockout = () => {
-      const storedLockoutUntil = localStorage.getItem(lockoutKey);
-      if (storedLockoutUntil) {
-        const remaining = Math.ceil((parseInt(storedLockoutUntil, 10) - Date.now()) / 1000);
-        if (remaining > 0) {
-          setLockoutRemainingSecs(remaining);
-        } else {
-          localStorage.removeItem(lockoutKey);
-          setLockoutRemainingSecs(0);
-        }
-      }
-    };
-    checkLockout();
-    const interval = setInterval(checkLockout, 1000);
-    return () => clearInterval(interval);
-  }, [targetTenant]);
-
-  // Settings & Profile Edit State
+  // Settings & Profile Edit State (no PIN stored here)
   const [profileForm, setProfileForm] = useState({
     tenant_name: "",
     category: "",
@@ -99,11 +81,16 @@ export default function TenantSelfService({
     whatsapp: "",
     phone: "",
     email: "",
-    pixel_id: "",
-    pin: ""
+    pixel_id: ""
   });
   const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
-  const [showCurrentPin, setShowCurrentPin] = useState(false);
+
+  // Change Tenant PIN State (via hitech_change_tenant_pin)
+  const [tenantOldPin, setTenantOldPin] = useState("");
+  const [tenantNewPin, setTenantNewPin] = useState("");
+  const [tenantConfirmPin, setTenantConfirmPin] = useState("");
+  const [changingTenantPin, setChangingTenantPin] = useState(false);
+  const [tenantPinFeedback, setTenantPinFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Load all registered merchants for dropdown
   useEffect(() => {
@@ -166,8 +153,7 @@ export default function TenantSelfService({
         whatsapp: authenticatedTenant.contact_info?.whatsapp || "",
         phone: authenticatedTenant.contact_info?.phone || "",
         email: authenticatedTenant.contact_info?.email || "",
-        pixel_id: authenticatedTenant.pixel_id || "",
-        pin: authenticatedTenant.pin || ""
+        pixel_id: authenticatedTenant.pixel_id || ""
       });
     }
   }, [authenticatedTenant]);
@@ -177,11 +163,6 @@ export default function TenantSelfService({
     if (!authenticatedTenant) return;
     if (!profileForm.tenant_name.trim()) {
       alert("Storefront Name is required.");
-      return;
-    }
-    const pinVal = profileForm.pin.trim();
-    if (pinVal && !/^\d{4,6}$/.test(pinVal)) {
-      alert("PIN must be a 4 to 6 digit numerical PIN.");
       return;
     }
 
@@ -195,15 +176,45 @@ export default function TenantSelfService({
         phone: profileForm.phone.trim(),
         email: profileForm.email.trim()
       },
-      pixel_id: profileForm.pixel_id.trim(),
-      pin: pinVal || authenticatedTenant.pin
+      pixel_id: profileForm.pixel_id.trim()
     };
 
     setAuthenticatedTenant(updated);
     await db.saveHubTenant(updated);
     if (onTenantUpdated) onTenantUpdated(updated);
-    setProfileSaveSuccess("Storefront profile & PIN settings updated successfully!");
+    setProfileSaveSuccess("Storefront profile settings updated successfully!");
     setTimeout(() => setProfileSaveSuccess(null), 3000);
+  };
+
+  const handleChangeTenantPin = async () => {
+    if (!authenticatedTenant) return;
+    setTenantPinFeedback(null);
+
+    if (!tenantOldPin.trim() || !tenantNewPin.trim() || !tenantConfirmPin.trim()) {
+      setTenantPinFeedback({ ok: false, message: "Please enter your current PIN and enter the new PIN twice." });
+      return;
+    }
+    if (tenantNewPin.trim() !== tenantConfirmPin.trim()) {
+      setTenantPinFeedback({ ok: false, message: "New PIN entries do not match." });
+      return;
+    }
+
+    const oldVal = tenantOldPin.trim();
+    const newVal = tenantNewPin.trim();
+    setTenantOldPin("");
+    setTenantNewPin("");
+    setTenantConfirmPin("");
+    setChangingTenantPin(true);
+
+    try {
+      const res = await db.hitechChangeTenantPin(authenticatedTenant.referral_code, oldVal, newVal);
+      setTenantPinFeedback({
+        ok: Boolean(res.ok),
+        message: res.message || (res.ok ? "PIN updated successfully." : "Unable to update PIN."),
+      });
+    } finally {
+      setChangingTenantPin(false);
+    }
   };
 
   const loadTenantProducts = async (tenantId: string) => {
@@ -246,55 +257,47 @@ export default function TenantSelfService({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const lockoutKey = targetTenant ? `hitech_pin_lockout_${targetTenant.id}` : 'hitech_pin_lockout_global';
-    const attemptsKey = targetTenant ? `hitech_pin_attempts_${targetTenant.id}` : 'hitech_pin_attempts_global';
-
     if (lockoutRemainingSecs > 0) {
-      setLoginError(`Security Lockout Active. Please wait ${Math.floor(lockoutRemainingSecs / 60)}m ${lockoutRemainingSecs % 60}s before trying again.`);
+      return;
+    }
+
+    const chosenTenant = targetTenant || allTenantsList.find(t => t.id === selectedTenantId);
+    if (!chosenTenant || !chosenTenant.referral_code) {
+      setLoginError("Please select your storefront.");
       return;
     }
 
     const pin = inputPin.trim();
     if (!pin) {
-      setLoginError("Please enter your secret 4-digit PIN.");
+      setLoginError("Please enter your secret PIN.");
       return;
     }
 
     setIsVerifying(true);
     setLoginError("");
+    setInputPin("");
 
     try {
-      const allTenants = await db.fetchHubTenants();
-      setAllTenantsList(allTenants);
+      const res = await db.hitechTenantLogin(chosenTenant.referral_code, pin);
 
-      const targetId = targetTenant ? targetTenant.id : (selectedTenantId || undefined);
-      const result = db.authenticateTenantWithPin(allTenants, pin, targetId);
+      if (res.ok) {
+        const latestTenants = await db.fetchHubTenants();
+        setAllTenantsList(latestTenants);
+        const matched =
+          latestTenants.find(t => t.id === res.tenant_id) ||
+          latestTenants.find(t => t.referral_code?.toUpperCase() === chosenTenant.referral_code.toUpperCase()) ||
+          chosenTenant;
 
-      if (result.success && result.tenant) {
-        // Reset failed attempts on success
-        localStorage.removeItem(attemptsKey);
-        localStorage.removeItem(lockoutKey);
-        setFailedAttempts(0);
-        setLockoutRemainingSecs(0);
-
-        setAuthenticatedTenant(result.tenant);
-        if (onAuthenticated) onAuthenticated(result.tenant);
+        setLockedUntil(null);
+        setAuthenticatedTenant(matched);
+        if (onAuthenticated) onAuthenticated(matched);
         setLoginError("");
-        setInputPin("");
       } else {
-        const prevAttempts = parseInt(localStorage.getItem(attemptsKey) || "0", 10);
-        const currentAttempts = prevAttempts + 1;
-        setFailedAttempts(currentAttempts);
-
-        if (currentAttempts >= 5) {
-          const lockoutUntil = Date.now() + 5 * 60 * 1000; // 5 minute security lockout
-          localStorage.setItem(lockoutKey, lockoutUntil.toString());
-          localStorage.removeItem(attemptsKey);
-          setLockoutRemainingSecs(300);
-          setLoginError("Too many failed PIN attempts. Access locked for 5 minutes to prevent unauthorized guessing.");
+        setLoginError(res.message || "Invalid credentials. Access denied.");
+        if (res.locked) {
+          setLockedUntil(res.locked_until || null);
         } else {
-          localStorage.setItem(attemptsKey, currentAttempts.toString());
-          setLoginError(`${result.error || "Invalid PIN. Access denied."} (${5 - currentAttempts} attempts remaining before 5-minute lockout)`);
+          setLockedUntil(null);
         }
       }
     } catch (err) {
@@ -597,19 +600,20 @@ export default function TenantSelfService({
             {!targetTenant && (
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-300 block mb-1.5">
-                  Select Your Registered Storefront (Optional)
+                  Select Your Registered Storefront *
                 </label>
                 <select
                   value={selectedTenantId}
                   onChange={e => {
                     setSelectedTenantId(e.target.value);
                     setLoginError("");
+                    setLockedUntil(null);
                   }}
                   disabled={lockoutRemainingSecs > 0}
                   className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-900 outline-none cursor-pointer disabled:opacity-50 shadow-sm"
                   style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                 >
-                  <option value="">-- Any Registered Storefront (Match by PIN) --</option>
+                  <option value="">-- Select Your Storefront --</option>
                   {allTenantsList.filter(t => t.status === 'active').map(t => (
                     <option key={t.id} value={t.id}>
                       {t.tenant_name} ({t.referral_code})
@@ -622,7 +626,7 @@ export default function TenantSelfService({
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
-                  Secret 4-Digit PIN *
+                  Secret PIN *
                 </label>
                 <span className="text-[10px] font-semibold text-emerald-400 font-mono">No Password Required</span>
               </div>
@@ -636,7 +640,7 @@ export default function TenantSelfService({
                     setLoginError("");
                   }}
                   disabled={lockoutRemainingSecs > 0}
-                  placeholder="Enter 4-digit PIN"
+                  placeholder="Enter your PIN"
                   maxLength={10}
                   className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-3 pr-10 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none placeholder:text-slate-500 placeholder:tracking-normal disabled:opacity-50 shadow-sm"
                   style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
@@ -654,28 +658,22 @@ export default function TenantSelfService({
               </div>
 
               <p className="text-[10px] text-slate-400 mt-1.5 leading-normal">
-                Direct PIN access: Enter your secret 4-digit numerical PIN (e.g. 4444 for Favour). Public referral codes cannot unlock edit mode.
+                Direct PIN access: Enter your secret numerical PIN. Public referral codes cannot unlock edit mode.
               </p>
             </div>
 
-            {lockoutRemainingSecs > 0 && (
-              <div className="p-3 bg-amber-950/90 border border-amber-600/80 text-amber-200 rounded-xl text-xs font-mono flex items-center gap-2.5">
-                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-                <div>
-                  <p className="font-bold text-amber-300 uppercase tracking-wide text-[10px]">Security Lockout Active</p>
-                  <p className="text-[11px] text-amber-200/90 mt-0.5">
-                    Locked for {Math.floor(lockoutRemainingSecs / 60)}m {lockoutRemainingSecs % 60}s to protect tenant financial data.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {loginError && (
+            {lockedUntil ? (
+              <LockoutCountdownBanner
+                lockedUntil={lockedUntil}
+                message={loginError}
+                onExpired={() => setLockedUntil(null)}
+              />
+            ) : loginError ? (
               <div className="p-3 bg-red-950/90 border border-red-800 text-red-300 rounded-xl text-xs font-mono flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                 <span className="leading-snug">{loginError}</span>
               </div>
-            )}
+            ) : null}
 
             <button
               type="submit"
@@ -1784,44 +1782,91 @@ export default function TenantSelfService({
               </div>
 
               <form onSubmit={handleSaveProfile} className="flex flex-col gap-5">
-                {/* Security Section: PIN */}
+                {/* Security Section: Change Private Access PIN via server RPC */}
                 <div className="bg-slate-950 p-4 rounded-xl border border-emerald-900/60 flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                      <Lock className="w-4 h-4" />
-                      <span>Private 4-Digit Access PIN</span>
+                      <Key className="w-4 h-4" />
+                      <span>Change Private Access PIN</span>
                     </label>
-                    <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
-                      Confidential Owner Key
+                    <span className="text-[10px] text-slate-300 font-mono">
+                      Referral Code: <strong className="text-emerald-400">{authenticatedTenant.referral_code}</strong>
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    This PIN unlocks your workspace directly with <strong>no password required</strong>. Keep it confidential so other merchants or visitors cannot access your products.
+                    To update your storefront PIN, enter your current PIN and type your new PIN twice. Your PIN is verified on the server and never displayed.
                   </p>
 
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <div className="relative w-full sm:w-64">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-300 mb-1">
+                        Old PIN
+                      </label>
                       <input
-                        type={showCurrentPin ? "text" : "password"}
-                        value={profileForm.pin}
-                        onChange={e => setProfileForm({ ...profileForm, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
-                        placeholder="Enter 4-digit PIN"
-                        className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none pr-10 shadow-sm placeholder:text-slate-500"
+                        type="password"
+                        autoComplete="current-password"
+                        value={tenantOldPin}
+                        onChange={e => setTenantOldPin(e.target.value)}
+                        placeholder="Current PIN"
+                        className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none shadow-sm placeholder:text-slate-500 placeholder:tracking-normal"
                         style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowCurrentPin(!showCurrentPin)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
-                        title={showCurrentPin ? "Hide PIN" : "Show PIN"}
-                      >
-                        {showCurrentPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
                     </div>
-                    <span className="text-[11px] text-slate-300 font-mono">
-                      Your Referral Code: <strong className="text-emerald-400">{authenticatedTenant.referral_code}</strong>
-                    </span>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-300 mb-1">
+                        New PIN
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={tenantNewPin}
+                        onChange={e => setTenantNewPin(e.target.value)}
+                        placeholder="New PIN"
+                        className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none shadow-sm placeholder:text-slate-500 placeholder:tracking-normal"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-300 mb-1">
+                        Confirm New PIN
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={tenantConfirmPin}
+                        onChange={e => setTenantConfirmPin(e.target.value)}
+                        placeholder="Re-enter New PIN"
+                        className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none shadow-sm placeholder:text-slate-500 placeholder:tracking-normal"
+                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                      />
+                    </div>
+                  </div>
+
+                  {tenantPinFeedback && (
+                    <div
+                      className={`p-2.5 rounded-lg text-xs font-mono border flex items-center gap-2 ${
+                        tenantPinFeedback.ok
+                          ? "bg-emerald-950/90 border-emerald-700 text-emerald-200"
+                          : "bg-red-950/90 border-red-700 text-red-200"
+                      }`}
+                    >
+                      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                      <span>{tenantPinFeedback.message}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={changingTenantPin}
+                      onClick={handleChangeTenantPin}
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold uppercase tracking-wider text-[11px] rounded-lg transition-colors cursor-pointer"
+                    >
+                      {changingTenantPin ? "Updating PIN..." : "Update Access PIN"}
+                    </button>
                   </div>
                 </div>
 

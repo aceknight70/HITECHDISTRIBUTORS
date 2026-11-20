@@ -105,9 +105,15 @@ function writeJsonFile<T>(filePath: string, data: T): void {
   }
 }
 
+function stripSensitiveTenantFields(obj: any): any {
+  if (!obj || typeof obj !== "object") return obj;
+  const { pin: _pin, pin_hash: _pinHash, ...clean } = obj;
+  return clean;
+}
+
 // API: Get all tenants
 app.get("/api/tenants", (req, res) => {
-  const tenants = readJsonFile<any[]>(tenantsFilePath, []);
+  const tenants = readJsonFile<any[]>(tenantsFilePath, []).map(stripSensitiveTenantFields);
   res.json(tenants);
 });
 
@@ -115,16 +121,17 @@ app.get("/api/tenants", (req, res) => {
 app.post("/api/tenants", (req, res) => {
   try {
     const payload = req.body;
-    let tenants = readJsonFile<any[]>(tenantsFilePath, []);
+    let tenants = readJsonFile<any[]>(tenantsFilePath, []).map(stripSensitiveTenantFields);
     
     if (Array.isArray(payload)) {
-      tenants = payload;
+      tenants = payload.map(stripSensitiveTenantFields);
     } else if (payload && payload.id) {
-      const idx = tenants.findIndex(t => t.id === payload.id);
+      const cleanPayload = stripSensitiveTenantFields(payload);
+      const idx = tenants.findIndex(t => t.id === cleanPayload.id);
       if (idx !== -1) {
-        tenants[idx] = { ...tenants[idx], ...payload };
+        tenants[idx] = { ...tenants[idx], ...cleanPayload };
       } else {
-        tenants.push(payload);
+        tenants.push(cleanPayload);
       }
     }
     

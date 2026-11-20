@@ -5,7 +5,6 @@
     "category": "Solar & Inverter Systems",
     "description": "Certified solar installer and inverter technician.",
     "referral_code": "MARTINSQW13",
-    "pin": "7139",
     "commission_rate": 1,
     "status": "active"
   },
@@ -15,7 +14,6 @@
     "category": "Home, Personal & Food Essentials",
     "description": "Everyday-essentials brand built around three practical product lines: The Stain Rectifier, female underwear and lingerie, and crayfish products.",
     "referral_code": "SHAMASFINDINGS01",
-    "pin": "4444",
     "commission_rate": 1,
     "status": "active"
   },
@@ -25,7 +23,6 @@
     "category": "Solar Power & POS Systems",
     "description": "Commercial and retail merchant solutions.",
     "referral_code": "SUMSHI",
-    "pin": "9284",
     "commission_rate": 1,
     "status": "active"
   },
@@ -39,7 +36,6 @@
       "phone": "+2348165103607",
       "whatsapp": "+2348165103607"
     },
-    "pin": "5443",
     "commission_rate": 1,
     "status": "active"
   }

@@ -1,11 +1,41 @@
 import React, { useState, useEffect } from "react";
-import { Clock, Users, Target, Shield, X, Settings, RefreshCw, Database, Store, DollarSign, Bell, CheckCircle, Plus, Trash2, Edit2 } from "lucide-react";
+import { Clock, Users, Target, Shield, X, Settings, RefreshCw, Database, Store, DollarSign, Bell, CheckCircle, Plus, Trash2, Edit2, Key, LogOut } from "lucide-react";
 import * as db from "./lib/supabase";
+import ChangeMyPinModal from "./components/ChangeMyPinModal";
+import AdminReAuthDialog from "./components/AdminReAuthDialog";
+import LockoutCountdownBanner, { useLockoutRemainingSeconds } from "./components/LockoutCountdownBanner";
 
-export default function MasterSection() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [pin, setPin] = useState("");
+interface MasterSectionProps {
+  session?: db.HiTechSession | null;
+  onSessionChange?: (session: db.HiTechSession | null) => void;
+}
+
+export default function MasterSection({ session, onSessionChange }: MasterSectionProps = {}) {
+  const [localSession, setLocalSession] = useState<db.HiTechSession | null>(() => session ?? db.getHiTechSession());
+  const activeSession = session !== undefined ? session : localSession;
+  const isLoggedIn = Boolean(activeSession && (activeSession.role || "").toLowerCase() === "master");
+
+  const updateSession = (next: db.HiTechSession | null) => {
+    db.setHiTechSession(next);
+    setLocalSession(next);
+    if (onSessionChange) onSessionChange(next);
+  };
+
+  const [masterCode, setMasterCode] = useState("");
+  const [masterPin, setMasterPin] = useState("");
   const [error, setError] = useState("");
+  const [lockedUntil, setLockedUntil] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [showChangeMyPin, setShowChangeMyPin] = useState(false);
+  const lockRemaining = useLockoutRemainingSeconds(lockedUntil, () => setLockedUntil(null));
+
+  // Tenant PIN setter state (server-side via AdminReAuthDialog)
+  const [pinTargetTenant, setPinTargetTenant] = useState<any | null>(null);
+  const [tenantNewPin, setTenantNewPin] = useState("");
+  const [tenantConfirmPin, setTenantConfirmPin] = useState("");
+  const [tenantPinError, setTenantPinError] = useState("");
+  const [pendingTenantPinSet, setPendingTenantPinSet] = useState<{ referralCode: string; tenantName: string; newPin: string } | null>(null);
+
   const [activeTab, setActiveTab] = useState<"engines" | "timeline" | "targets" | "staff" | "tenants">("engines");
 
   // State
@@ -24,7 +54,6 @@ export default function MasterSection() {
     name: "",
     category: "",
     code: "",
-    pin: "",
     commission_rate: 1.0,
     pixel_id: "",
     description: "",
@@ -87,13 +116,50 @@ export default function MasterSection() {
     }
   }, [isLoggedIn]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin === "efeiconic" || pin === "master26") {
-      setIsLoggedIn(true);
+    setError("");
+
+    const codeVal = masterCode.trim().toUpperCase();
+    const pinVal = masterPin.trim();
+    // Immediately clear PIN from component state
+    setMasterPin("");
+
+    if (!codeVal || !pinVal) {
+      setError("Please enter your ID and PIN.");
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const res = await db.hitechLogin(codeVal, pinVal);
+      if (!res.ok) {
+        setError(res.message || "Authentication failed.");
+        if (res.locked) {
+          setLockedUntil(res.locked_until || null);
+        } else {
+          setLockedUntil(null);
+        }
+        return;
+      }
+
+      if ((res.role || "").toLowerCase() !== "master") {
+        setError("Access denied. Master role is required for Master Section.");
+        setLockedUntil(null);
+        return;
+      }
+
+      updateSession({
+        id: res.id || "",
+        code: res.code || codeVal,
+        name: res.name || codeVal,
+        role: res.role || "master",
+      });
+      setMasterCode("");
       setError("");
-    } else {
-      setError("Unauthorized access.");
+      setLockedUntil(null);
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -188,20 +254,54 @@ export default function MasterSection() {
         <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-900/40 text-center">
           <Shield className="w-8 h-8 text-purple-500 mx-auto mb-2" />
           <h3 className="text-purple-400 font-black tracking-widest uppercase mb-1">Master Access Tier</h3>
-          <p className="text-[10px] text-slate-400 font-mono">Restricted to ESGMC / Efeiconic</p>
+          <p className="text-[10px] text-slate-400 font-mono">Restricted to authorized Master role accounts</p>
         </div>
         <form onSubmit={handleLogin} className="p-5 bg-slate-900 rounded-xl border border-slate-800 flex flex-col gap-4">
-          <label className="text-[10px] text-slate-500 uppercase tracking-widest font-bold text-center">Enter Master PIN</label>
-          <input
-            type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            className="bg-slate-950 border border-slate-800 text-center text-purple-400 text-xl font-mono tracking-[0.5em] rounded-lg p-4 outline-none focus:border-purple-500 transition-colors"
-            placeholder="••••"
-          />
-          {error && <p className="text-xs text-red-500 text-center uppercase tracking-widest font-bold">{error}</p>}
-          <button type="submit" className="w-full py-4 bg-purple-700 hover:bg-purple-600 rounded-lg text-xs font-black text-white uppercase tracking-widest shadow-lg">
-            Authenticate
+          <div>
+            <label className="text-[10px] text-slate-300 uppercase tracking-widest font-bold block mb-1">Staff ID</label>
+            <input
+              type="text"
+              autoComplete="username"
+              value={masterCode}
+              onChange={(e) => {
+                setMasterCode(e.target.value.toUpperCase());
+                setError("");
+              }}
+              className="w-full bg-white border border-slate-300 text-slate-900 font-mono uppercase text-sm rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+              placeholder="e.g. HTD-001"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-300 uppercase tracking-widest font-bold block mb-1">PIN</label>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={masterPin}
+              onChange={(e) => {
+                setMasterPin(e.target.value);
+                setError("");
+              }}
+              className="w-full bg-white border border-slate-300 text-center text-slate-900 text-lg font-mono tracking-[0.4em] rounded-lg p-3 outline-none focus:ring-2 focus:ring-purple-500"
+              style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+              placeholder="••••"
+            />
+          </div>
+          {lockedUntil ? (
+            <LockoutCountdownBanner
+              lockedUntil={lockedUntil}
+              message={error}
+              onExpired={() => setLockedUntil(null)}
+            />
+          ) : (
+            error && <p className="text-xs text-red-400 text-center font-mono font-bold">{error}</p>
+          )}
+          <button
+            type="submit"
+            disabled={loginLoading || lockRemaining > 0}
+            className="w-full py-4 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 rounded-lg text-xs font-black text-white uppercase tracking-widest shadow-lg cursor-pointer transition-colors"
+          >
+            {loginLoading ? "Authenticating..." : lockRemaining > 0 ? "Locked" : "Authenticate"}
           </button>
         </form>
       </div>
@@ -214,16 +314,40 @@ export default function MasterSection() {
         <div className="absolute top-0 right-0 p-2 opacity-10">
           <Shield className="w-24 h-24 text-purple-400" />
         </div>
-        <div className="flex justify-between items-center relative z-10">
+        <div className="flex flex-wrap justify-between items-center gap-2 relative z-10">
           <div>
             <h3 className="text-purple-400 font-black text-lg tracking-widest uppercase flex items-center gap-2">
               <Database className="w-5 h-5" /> Master Hub
             </h3>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">Supabase Live Database</p>
+            <p className="text-xs text-emerald-300 font-bold mt-0.5">
+              Welcome, {activeSession?.name || "Master"}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wider">Supabase Live Database</p>
           </div>
-          <button onClick={fetchData} className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700">
-             <RefreshCw className={"w-4 h-4 text-slate-300 " + (loading ? "animate-spin" : "")} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowChangeMyPin(true)}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Change my PIN</span>
+            </button>
+            <button onClick={fetchData} className="p-2 bg-slate-800 rounded-lg hover:bg-slate-700 cursor-pointer" title="Refresh data">
+              <RefreshCw className={"w-4 h-4 text-slate-300 " + (loading ? "animate-spin" : "")} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                updateSession(null);
+                setError("");
+              }}
+              className="px-2.5 py-1.5 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-900/70 rounded-lg text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Log out</span>
+            </button>
+          </div>
         </div>
       </div>
       
@@ -613,7 +737,6 @@ export default function MasterSection() {
                       name: "",
                       category: "",
                       code: "",
-                      pin: "",
                       commission_rate: 1.0,
                       pixel_id: "",
                       description: "",
@@ -660,17 +783,6 @@ export default function MasterSection() {
                         value={tenantFormData.code}
                         onChange={e => setTenantFormData({ ...tenantFormData, code: e.target.value.toUpperCase() })}
                         placeholder="e.g. MARTINSQW13 or SHAMASFINDINGS01"
-                        className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-xs font-mono uppercase text-emerald-400 font-bold outline-none focus:border-emerald-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-slate-400 block mb-0.5">Direct Access PIN (e.g. 4444 for Favor) - No Password</label>
-                      <input
-                        type="text"
-                        value={tenantFormData.pin}
-                        onChange={e => setTenantFormData({ ...tenantFormData, pin: e.target.value.trim() })}
-                        placeholder="e.g. 4444"
                         className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-xs font-mono uppercase text-emerald-400 font-bold outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -780,7 +892,6 @@ export default function MasterSection() {
                           },
                           invoicing_enabled: true,
                           referral_code: finalCode,
-                          pin: tenantFormData.pin.trim() || (editingTenant?.pin || (tenantFormData.name.toLowerCase().includes("favour") ? "4444" : "")),
                           assigned_by: "master",
                           commission_rate: Number(tenantFormData.commission_rate) || 1.0,
                           pixel_id: tenantFormData.pixel_id.trim(),
@@ -822,11 +933,11 @@ export default function MasterSection() {
                           )}
                         </div>
                         <p className="text-[10px] font-mono text-emerald-400 mt-0.5">
-                          Code: <strong className="text-white">{tenant.referral_code}</strong> • PIN: <strong className="text-emerald-300 font-bold">{tenant.pin || (tenant.tenant_name.toLowerCase().includes("favour") ? "4444" : "None")}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
+                          Code: <strong className="text-white">{tenant.referral_code}</strong> • Traffic: {tenant.referral_entries || 0} Ref / {tenant.discovery_entries || 0} Disc
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
                         <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded px-2 py-1">
                           <span className="text-[9px] text-slate-400 uppercase font-bold">Rate:</span>
                           <input
@@ -845,13 +956,27 @@ export default function MasterSection() {
                         </div>
 
                         <button
+                          type="button"
+                          onClick={() => {
+                            setPinTargetTenant(tenant);
+                            setTenantNewPin("");
+                            setTenantConfirmPin("");
+                            setTenantPinError("");
+                          }}
+                          className="px-2 py-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 rounded text-[10px] font-bold flex items-center gap-1 border border-amber-800/80 cursor-pointer"
+                          title="Set Tenant PIN"
+                        >
+                          <Key className="w-3 h-3" />
+                          <span>PIN</span>
+                        </button>
+
+                        <button
                           onClick={() => {
                             setEditingTenant(tenant);
                             setTenantFormData({
                               name: tenant.tenant_name,
                               category: tenant.category || "",
                               code: tenant.referral_code,
-                              pin: tenant.pin || (tenant.tenant_name?.toLowerCase().includes("favour") ? "4444" : ""),
                               commission_rate: tenant.commission_rate ?? 1.0,
                               pixel_id: tenant.pixel_id || "",
                               description: tenant.description || "",
@@ -988,6 +1113,124 @@ export default function MasterSection() {
           </div>
         )}
       </div>
+
+      {showChangeMyPin && activeSession && (
+        <ChangeMyPinModal
+          personCode={activeSession.code}
+          personName={activeSession.name}
+          onClose={() => setShowChangeMyPin(false)}
+        />
+      )}
+
+      {pinTargetTenant && (
+        <div className="fixed inset-0 z-[2600] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full text-slate-100 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => {
+                setPinTargetTenant(null);
+                setTenantNewPin("");
+                setTenantConfirmPin("");
+                setTenantPinError("");
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+              <Key className="w-4 h-4" />
+              <span>Set Tenant PIN</span>
+            </div>
+            <h3 className="text-base font-bold text-white">{pinTargetTenant.tenant_name}</h3>
+            <p className="text-xs text-slate-400 mt-1 mb-4">
+              Enter a new PIN twice for code <span className="font-mono text-slate-200">{pinTargetTenant.referral_code}</span>. Existing PINs cannot be viewed.
+            </p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1">New PIN</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={tenantNewPin}
+                  onChange={(e) => {
+                    setTenantNewPin(e.target.value);
+                    setTenantPinError("");
+                  }}
+                  placeholder="Enter new PIN"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-mono text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1">Confirm New PIN</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={tenantConfirmPin}
+                  onChange={(e) => {
+                    setTenantConfirmPin(e.target.value);
+                    setTenantPinError("");
+                  }}
+                  placeholder="Re-enter new PIN"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-slate-900 font-mono text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                />
+              </div>
+              {tenantPinError && <p className="text-xs text-red-400 font-mono">{tenantPinError}</p>}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!tenantNewPin.trim() || !tenantConfirmPin.trim()) {
+                      setTenantPinError("Please enter the new PIN twice.");
+                      return;
+                    }
+                    if (tenantNewPin.trim() !== tenantConfirmPin.trim()) {
+                      setTenantPinError("New PIN entries do not match.");
+                      return;
+                    }
+                    const pinVal = tenantNewPin.trim();
+                    const refCode = pinTargetTenant.referral_code;
+                    const tName = pinTargetTenant.tenant_name;
+                    setTenantNewPin("");
+                    setTenantConfirmPin("");
+                    setPinTargetTenant(null);
+                    setPendingTenantPinSet({ referralCode: refCode, tenantName: tName, newPin: pinVal });
+                  }}
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                >
+                  Continue
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPinTargetTenant(null);
+                    setTenantNewPin("");
+                    setTenantConfirmPin("");
+                    setTenantPinError("");
+                  }}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminReAuthDialog
+        isOpen={pendingTenantPinSet !== null}
+        title={pendingTenantPinSet ? `Set PIN for ${pendingTenantPinSet.tenantName}` : "Confirm Identity"}
+        onCancel={() => setPendingTenantPinSet(null)}
+        onConfirm={async (adminCode, adminPin) => {
+          const payload = pendingTenantPinSet;
+          setPendingTenantPinSet(null);
+          if (!payload) return;
+          const res = await db.hitechAdminSetTenantPin(adminCode, adminPin, payload.referralCode, payload.newPin);
+          showSaveStatus(res.message || (res.ok ? `PIN updated for ${payload.tenantName}` : "Failed to update tenant PIN."));
+        }}
+      />
     </div>
   );
 }
