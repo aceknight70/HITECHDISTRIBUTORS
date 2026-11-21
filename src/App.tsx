@@ -7384,13 +7384,14 @@ Issue: ${escDesc}`;
                     drag
                     dragMomentum={false}
                     onClick={() => setCurrentRoom("staff")}
-                    className="w-12 h-12 bg-[#facc15] hover:bg-[#fde047] rounded-full flex flex-col items-center justify-center text-[#0f172a] shadow-[0_4px_15px_rgba(250,204,21,0.45)] border-2 border-[#0f172a]/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                    className="w-12 h-12 bg-[#facc15] hover:bg-[#fde047] rounded-full flex flex-col items-center justify-center text-black shadow-[0_4px_15px_rgba(250,204,21,0.45)] border-2 border-black/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                    style={{ backgroundColor: "#facc15", color: "#0f172a" }}
                     title={staffIsLoggedIn ? "Open Staff Corner Portal" : "Staff Room Login"}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Users className="w-4 h-4 text-[#0f172a]" />
-                    <span className="text-[7px] font-black mt-[1px] tracking-wide text-[#0f172a]">STAFF</span>
+                    <Users className="w-4 h-4 text-black" />
+                    <span className="text-[7px] font-black mt-[1px] tracking-wide text-black">STAFF</span>
                   </motion.button>
                 )}
             </div>

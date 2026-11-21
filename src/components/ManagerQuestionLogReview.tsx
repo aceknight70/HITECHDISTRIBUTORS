@@ -318,7 +318,8 @@ export default function ManagerQuestionLogReview({
         <button
           type="button"
           onClick={onBack}
-          className="px-4 py-2 rounded-lg bg-white text-[#0f172a] text-xs font-bold uppercase cursor-pointer"
+          className="px-4 py-2 rounded-lg bg-white text-black text-xs font-bold uppercase cursor-pointer"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
         >
           ← Back
         </button>
@@ -410,9 +411,10 @@ export default function ManagerQuestionLogReview({
           type="button"
           disabled={reviewedForExport.length === 0}
           onClick={handleExportCsv}
-          className="w-full py-2.5 px-3 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-50 text-[#0f172a] font-black text-xs uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
+          className="w-full py-2.5 px-3 rounded-lg bg-white hover:bg-slate-100 disabled:opacity-50 text-black font-black text-xs uppercase tracking-wide flex items-center justify-center gap-2 cursor-pointer transition-colors"
         >
-          <Download className="w-4 h-4 text-[#dc2626]" />
+          <Download className="w-4 h-4 text-red-600" />
           <span>
             Export Reviewed CSV ({reviewedForExport.length})
           </span>
@@ -430,7 +432,8 @@ export default function ManagerQuestionLogReview({
             <button
               type="button"
               onClick={loadAll}
-              className="px-2.5 py-1 rounded bg-white text-[#0f172a] font-black text-[10px] uppercase cursor-pointer"
+              className="px-2.5 py-1 rounded bg-white text-black font-black text-[10px] uppercase cursor-pointer"
+              style={{ backgroundColor: "#ffffff", color: "#000000" }}
             >
               Retry
             </button>
@@ -526,14 +529,15 @@ export default function ManagerQuestionLogReview({
               {summaryStats.trickyNotes.map((item) => (
                 <div
                   key={item.id}
-                  className="p-2.5 rounded-lg bg-white text-[#0f172a] border border-slate-300 text-xs"
+                  style={{ backgroundColor: "#ffffff", color: "#000000" }}
+                  className="p-2.5 rounded-lg bg-white text-black border border-slate-300 text-xs"
                 >
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mb-0.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-black mb-0.5">
                     <span>{item.logged_by_name}</span>
                     <span>{item.asked_on}</span>
                   </div>
-                  <p className="font-bold text-[#dc2626]">{item.tricky_note}</p>
-                  <p className="text-[11px] text-slate-700 truncate mt-0.5">{item.question_text}</p>
+                  <p className="font-bold text-red-600">{item.tricky_note}</p>
+                  <p className="text-[11px] text-black truncate mt-0.5">{item.question_text}</p>
                 </div>
               ))}
             </div>
@@ -551,7 +555,7 @@ export default function ManagerQuestionLogReview({
             <button
               type="button"
               onClick={() => setShowAllMatching((prev) => !prev)}
-              className="text-xs font-bold text-white underline hover:text-[#dc2626] cursor-pointer"
+              className="text-xs font-bold text-white underline hover:text-red-400 cursor-pointer"
             >
               {showAllMatching ? "Show last 20" : `Show all ${filteredEntries.length}`}
             </button>
@@ -559,11 +563,11 @@ export default function ManagerQuestionLogReview({
         </div>
 
         {loading ? (
-          <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-slate-300">
+          <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-white">
             Loading question log entries...
           </div>
         ) : displayedEntries.length === 0 ? (
-          <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-slate-300">
+          <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-white">
             No customer question entries match this filter.
           </div>
         ) : (
@@ -576,13 +580,14 @@ export default function ManagerQuestionLogReview({
             return (
               <div
                 key={entry.id}
-                className="p-4 rounded-xl bg-white text-[#0f172a] border-2 border-slate-300 flex flex-col gap-2.5 shadow-sm"
+                style={{ backgroundColor: "#ffffff", color: "#000000" }}
+                className="p-4 rounded-xl bg-white text-black border-2 border-slate-300 flex flex-col gap-2.5 shadow-sm"
               >
                 {/* Header badges */}
                 <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] font-bold">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {entry.entry_no && (
-                      <span className="px-2 py-0.5 rounded bg-slate-200 text-[#0f172a] font-mono">
+                      <span className="px-2 py-0.5 rounded bg-slate-200 text-black font-mono">
                         #{entry.entry_no}
                       </span>
                     )}
@@ -595,42 +600,42 @@ export default function ManagerQuestionLogReview({
                           ? "bg-[#0f172a] text-white"
                           : isNeedsFix
                           ? "bg-[#dc2626] text-white"
-                          : "bg-slate-200 text-[#0f172a]"
+                          : "bg-slate-200 text-black"
                       }`}
                     >
                       {isReviewed ? "reviewed" : isNeedsFix ? "needs fix" : "pending"}
                     </span>
                     {entry.recalled && (
-                      <span className="px-2 py-0.5 rounded bg-slate-200 text-[#0f172a]">
+                      <span className="px-2 py-0.5 rounded bg-slate-200 text-black">
                         From memory
                       </span>
                     )}
                   </div>
-                  <span className="font-mono text-slate-600">{entry.asked_on}</span>
+                  <span className="font-mono text-black">{entry.asked_on}</span>
                 </div>
 
-                <div className="text-[11px] font-bold text-slate-700">
-                  Logged by: <span className="text-[#0f172a]">{entry.logged_by_name}</span> ({entry.logged_by_staff_id})
+                <div className="text-[11px] font-bold text-black">
+                  Logged by: <span className="text-black">{entry.logged_by_name}</span> ({entry.logged_by_staff_id})
                 </div>
 
                 {/* Question text */}
-                <p className="text-sm font-semibold text-[#0f172a] bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-wrap break-words leading-snug">
+                <p className="text-sm font-semibold text-black bg-slate-50 p-3 rounded-lg border border-slate-200 whitespace-pre-wrap break-words leading-snug">
                   {entry.question_text}
                 </p>
 
                 {/* All Labels */}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[#0f172a] bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-black bg-slate-50 p-2.5 rounded-lg border border-slate-200">
                   <div>
-                    <span className="text-slate-600 font-bold">Status:</span> {entry.status}
+                    <span className="text-black font-bold">Status:</span> {entry.status}
                   </div>
                   <div>
-                    <span className="text-slate-600 font-bold">Intent:</span> {entry.intent || "—"}
+                    <span className="text-black font-bold">Intent:</span> {entry.intent || "—"}
                   </div>
                   <div>
-                    <span className="text-slate-600 font-bold">Sentiment:</span> {entry.sentiment || "—"}
+                    <span className="text-black font-bold">Sentiment:</span> {entry.sentiment || "—"}
                   </div>
                   <div>
-                    <span className="text-slate-600 font-bold">Personal details:</span>{" "}
+                    <span className="text-black font-bold">Personal details:</span>{" "}
                     {entry.pii_present === true
                       ? `Yes (${entry.pii_kind || "Unspecified"})`
                       : entry.pii_present === false
@@ -638,34 +643,34 @@ export default function ManagerQuestionLogReview({
                       : "—"}
                   </div>
                   <div>
-                    <span className="text-slate-600 font-bold">Confidence:</span>{" "}
+                    <span className="text-black font-bold">Confidence:</span>{" "}
                     {entry.confidence || "—"}
                   </div>
                   <div>
-                    <span className="text-slate-600 font-bold">Store had answer:</span>{" "}
+                    <span className="text-black font-bold">Store had answer:</span>{" "}
                     {entry.store_had_answer || "—"}
                   </div>
                 </div>
 
                 {/* Tricky reasons & note */}
                 {entry.confidence === "Tricky" && (
-                  <div className="text-xs p-2.5 rounded-lg bg-[#fef2f2] border border-[#dc2626] text-[#0f172a]">
-                    <p className="font-bold text-[#dc2626]">
+                  <div className="text-xs p-2.5 rounded-lg bg-[#fef2f2] border border-[#dc2626] text-black">
+                    <p className="font-bold text-red-600">
                       Tricky reasons:{" "}
                       {Array.isArray(entry.tricky_reasons) && entry.tricky_reasons.length > 0
                         ? entry.tricky_reasons.join(", ")
                         : "None ticked"}
                     </p>
                     {entry.tricky_note && (
-                      <p className="mt-1 font-medium">Note: {entry.tricky_note}</p>
+                      <p className="mt-1 font-medium text-black">Note: {entry.tricky_note}</p>
                     )}
                   </div>
                 )}
 
                 {/* Missing items */}
                 {entry.store_had_answer === "No" && (
-                  <div className="text-xs p-2.5 rounded-lg bg-slate-100 border border-slate-300 text-[#0f172a]">
-                    <span className="font-bold">Missing from store: </span>
+                  <div className="text-xs p-2.5 rounded-lg bg-slate-100 border border-slate-300 text-black">
+                    <span className="font-bold text-black">Missing from store: </span>
                     {Array.isArray(entry.missing_items) && entry.missing_items.length > 0
                       ? entry.missing_items.join(", ")
                       : "None ticked"}
@@ -674,21 +679,21 @@ export default function ManagerQuestionLogReview({
 
                 {/* Existing manager review note if needs fix or reviewed */}
                 {entry.review_note && !isReviewed && (
-                  <div className="text-xs p-2 rounded bg-[#fef2f2] border border-[#dc2626] text-[#0f172a]">
-                    <strong className="text-[#dc2626]">Previous Fix Note: </strong>
+                  <div className="text-xs p-2 rounded bg-[#fef2f2] border border-[#dc2626] text-black">
+                    <strong className="text-red-600">Previous Fix Note: </strong>
                     {entry.review_note}
                   </div>
                 )}
 
                 {/* Actions: locked once reviewed */}
                 {isReviewed ? (
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs font-bold text-slate-600">
-                    <span className="flex items-center gap-1.5 text-[#0f172a]">
-                      <Lock className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs font-bold text-black">
+                    <span className="flex items-center gap-1.5 text-black">
+                      <Lock className="w-3.5 h-3.5 text-black" />
                       <span>Reviewed &amp; Locked</span>
                     </span>
                     {entry.reviewed_by && (
-                      <span className="text-[11px] font-mono">{entry.reviewed_by}</span>
+                      <span className="text-[11px] font-mono text-black">{entry.reviewed_by}</span>
                     )}
                   </div>
                 ) : (
@@ -735,7 +740,7 @@ export default function ManagerQuestionLogReview({
                           onChange={(e) => setNeedsFixNote(e.target.value)}
                           placeholder="Short note for staff member"
                           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs outline-none"
-                          style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                          style={{ backgroundColor: "#ffffff", color: "#000000" }}
                         />
                         <button
                           type="button"

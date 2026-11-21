@@ -342,7 +342,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
               <Tag className="w-3.5 h-3.5 shrink-0" />
               <span>To Label</span>
               {unlabeledOldestFirst.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-white text-[#0f172a]">
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-white text-black" style={{ color: "#000000" }}>
                   {unlabeledOldestFirst.length}
                 </span>
               )}
@@ -370,7 +370,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
             <button
               type="button"
               onClick={loadEntries}
-              className="px-3 py-1.5 rounded-lg bg-white text-[#0f172a] font-bold uppercase text-[11px] shrink-0 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-white text-black font-bold uppercase text-[11px] shrink-0 cursor-pointer"
+              style={{ color: "#000000" }}
             >
               Retry
             </button>
@@ -400,14 +401,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
               </div>
 
               {/* Read-only Question Text */}
-              <div className="p-4 rounded-xl bg-white text-[#0f172a] border-2 border-slate-300 shadow-sm">
+              <div className="p-4 rounded-xl bg-white text-black border-2 border-slate-300 shadow-sm" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
                 <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-[#dc2626]">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-red-600" style={{ color: "#dc2626" }}>
                     Customer Question (Read-Only)
                   </span>
-                  <span className="text-[11px] font-mono text-slate-600">{editingEntry.asked_on}</span>
+                  <span className="text-[11px] font-mono text-black">{editingEntry.asked_on}</span>
                 </div>
-                <p className="text-sm font-semibold text-[#0f172a] leading-relaxed whitespace-pre-wrap break-words">
+                <p className="text-sm font-semibold text-black leading-relaxed whitespace-pre-wrap break-words">
                   {editingEntry.question_text}
                 </p>
                 {editingEntry.recalled && (
@@ -419,8 +420,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
 
               {db.isQuestionLogNeedsFix(editingEntry.review_status) && (
                 <div className="p-3 rounded-xl bg-[#7f1d1d] border border-[#dc2626] text-white text-xs">
-                  <p className="font-black uppercase tracking-wide mb-1">Manager Note (Needs Fix)</p>
-                  <p className="text-white/95">{editingEntry.review_note || "Please review and update your labels."}</p>
+                  <p className="font-black uppercase tracking-wide mb-1 text-white">Manager Note (Needs Fix)</p>
+                  <p className="text-white">{editingEntry.review_note || "Please review and update your labels."}</p>
                 </div>
               )}
 
@@ -437,10 +438,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                         key={intentOption}
                         type="button"
                         onClick={() => setLabelIntent(intentOption)}
+                        style={{
+                          backgroundColor: selected ? "#dc2626" : "#ffffff",
+                          color: selected ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-3 rounded-xl text-sm font-bold border-2 text-center transition-colors cursor-pointer ${
                           selected
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         } ${intentOption === "Product Enquiry" ? "col-span-2" : ""}`}
                       >
                         {intentOption}
@@ -463,10 +468,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                         key={sentimentOption}
                         type="button"
                         onClick={() => setLabelSentiment(sentimentOption)}
+                        style={{
+                          backgroundColor: selected ? "#dc2626" : "#ffffff",
+                          color: selected ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-2 rounded-xl text-sm font-bold border-2 text-center transition-colors cursor-pointer ${
                           selected
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         }`}
                       >
                         {sentimentOption}
@@ -495,10 +504,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                           setLabelPiiPresent(opt.val);
                           if (!opt.val) setLabelPiiKind(null);
                         }}
+                        style={{
+                          backgroundColor: selected ? "#dc2626" : "#ffffff",
+                          color: selected ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-3 rounded-xl text-sm font-bold border-2 text-center transition-colors cursor-pointer ${
                           selected
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         }`}
                       >
                         {opt.label}
@@ -509,7 +522,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
 
                 {labelPiiPresent === true && (
                   <div className="mt-3 pt-3 border-t border-slate-700">
-                    <p className="text-xs font-bold text-slate-200 mb-2">Which kind?</p>
+                    <p className="text-xs font-bold text-white mb-2">Which kind?</p>
                     <div className="grid grid-cols-2 gap-2">
                       {db.QUESTION_LOG_PII_KINDS.map((kind) => {
                         const selected = labelPiiKind === kind;
@@ -518,10 +531,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                             key={kind}
                             type="button"
                             onClick={() => setLabelPiiKind(kind)}
+                            style={{
+                              backgroundColor: selected ? "#dc2626" : "#ffffff",
+                              color: selected ? "#ffffff" : "#000000",
+                            }}
                             className={`py-2.5 px-3 rounded-xl text-xs font-bold border-2 text-center transition-colors cursor-pointer ${
                               selected
                                 ? "bg-[#dc2626] border-white text-white"
-                                : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                                : "bg-white border-slate-300 text-black hover:bg-slate-100"
                             }`}
                           >
                             {kind}
@@ -552,10 +569,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                             setLabelTrickyNote("");
                           }
                         }}
+                        style={{
+                          backgroundColor: selected ? "#dc2626" : "#ffffff",
+                          color: selected ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-3 rounded-xl text-sm font-bold border-2 text-center transition-colors cursor-pointer ${
                           selected
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         }`}
                       >
                         {conf}
@@ -566,7 +587,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
 
                 {labelConfidence === "Tricky" && (
                   <div className="mt-3 pt-3 border-t border-slate-700 flex flex-col gap-2.5">
-                    <p className="text-xs font-bold text-slate-200">Why was it tricky? (Tap all that apply)</p>
+                    <p className="text-xs font-bold text-white">Why was it tricky? (Tap all that apply)</p>
                     <div className="grid grid-cols-2 gap-2">
                       {db.QUESTION_LOG_TRICKY_REASONS.map((reason) => {
                         const selected = labelTrickyReasons.includes(reason);
@@ -575,10 +596,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                             key={reason}
                             type="button"
                             onClick={() => toggleMultiItem(labelTrickyReasons, reason, setLabelTrickyReasons)}
+                            style={{
+                              backgroundColor: selected ? "#dc2626" : "#ffffff",
+                              color: selected ? "#ffffff" : "#000000",
+                            }}
                             className={`py-2.5 px-2.5 rounded-xl text-xs font-bold border-2 text-center transition-colors cursor-pointer ${
                               selected
                                 ? "bg-[#dc2626] border-white text-white"
-                                : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                                : "bg-white border-slate-300 text-black hover:bg-slate-100"
                             }`}
                           >
                             {reason}
@@ -587,7 +612,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                       })}
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-200 mb-1">
+                      <label className="block text-[11px] font-bold text-white mb-1">
                         Short note (optional, max 140 chars)
                       </label>
                       <input
@@ -597,9 +622,9 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                         onChange={(e) => setLabelTrickyNote(e.target.value)}
                         placeholder="Optional one-line explanation"
                         className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#dc2626]"
-                        style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                        style={{ backgroundColor: "#ffffff", color: "#000000" }}
                       />
-                      <p className="text-[10px] text-slate-400 text-right mt-0.5">
+                      <p className="text-[10px] text-white text-right mt-0.5">
                         {labelTrickyNote.length}/140
                       </p>
                     </div>
@@ -625,10 +650,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                             setLabelMissingItems([]);
                           }
                         }}
+                        style={{
+                          backgroundColor: selected ? "#dc2626" : "#ffffff",
+                          color: selected ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-2 rounded-xl text-sm font-bold border-2 text-center transition-colors cursor-pointer ${
                           selected
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         }`}
                       >
                         {ans}
@@ -639,7 +668,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
 
                 {labelStoreHadAnswer === "No" && (
                   <div className="mt-3 pt-3 border-t border-slate-700">
-                    <p className="text-xs font-bold text-slate-200 mb-2">
+                    <p className="text-xs font-bold text-white mb-2">
                       What was missing? (Tap all that apply)
                     </p>
                     <div className="grid grid-cols-2 gap-2">
@@ -650,10 +679,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                             key={item}
                             type="button"
                             onClick={() => toggleMultiItem(labelMissingItems, item, setLabelMissingItems)}
+                            style={{
+                              backgroundColor: selected ? "#dc2626" : "#ffffff",
+                              color: selected ? "#ffffff" : "#000000",
+                            }}
                             className={`py-2.5 px-2.5 rounded-xl text-xs font-bold border-2 text-center transition-colors cursor-pointer ${
                               selected
                                 ? "bg-[#dc2626] border-white text-white"
-                                : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                                : "bg-white border-slate-300 text-black hover:bg-slate-100"
                             }`}
                           >
                             {item}
@@ -674,7 +707,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                       <button
                         type="button"
                         onClick={handleSaveLabels}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-white text-[#0f172a] font-extrabold text-[11px] uppercase cursor-pointer"
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-white text-black font-extrabold text-[11px] uppercase cursor-pointer"
+                        style={{ color: "#000000" }}
                       >
                         Retry
                       </button>
@@ -737,10 +771,14 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                           setSource(src);
                           if (quickAddSuccess) setQuickAddSuccess("");
                         }}
+                        style={{
+                          backgroundColor: active ? "#dc2626" : "#ffffff",
+                          color: active ? "#ffffff" : "#000000",
+                        }}
                         className={`py-3 px-2 rounded-xl text-xs font-extrabold border-2 text-center transition-colors cursor-pointer ${
                           active
                             ? "bg-[#dc2626] border-white text-white shadow"
-                            : "bg-white border-slate-300 text-[#0f172a] hover:bg-slate-100"
+                            : "bg-white border-slate-300 text-black hover:bg-slate-100"
                         }`}
                       >
                         {src}
@@ -818,7 +856,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                       <button
                         type="button"
                         onClick={() => handleSaveQuickAdd()}
-                        className="mt-2 px-3 py-1.5 rounded-lg bg-white text-[#0f172a] font-extrabold text-[11px] uppercase cursor-pointer"
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-white text-black font-extrabold text-[11px] uppercase cursor-pointer"
+                        style={{ color: "#000000" }}
                       >
                         Retry
                       </button>
@@ -828,8 +867,11 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
               )}
 
               {quickAddSuccess && (
-                <div className="p-3.5 rounded-xl bg-white text-[#0f172a] border-2 border-[#16233b] text-sm font-black flex items-center gap-2 shadow">
-                  <CheckCircle2 className="w-5 h-5 text-[#dc2626] shrink-0" />
+                <div
+                  className="p-3.5 rounded-xl bg-white text-black border-2 border-[#16233b] text-sm font-black flex items-center gap-2 shadow"
+                  style={{ backgroundColor: "#ffffff", color: "#000000" }}
+                >
+                  <CheckCircle2 className="w-5 h-5 text-red-600 shrink-0" />
                   <span>{quickAddSuccess}</span>
                 </div>
               )}
@@ -872,26 +914,27 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                     key={entry.id}
                     type="button"
                     onClick={() => openLabelScreen(entry, "to-label")}
-                    className="w-full text-left p-4 rounded-xl bg-white text-[#0f172a] border-2 border-slate-300 hover:border-[#dc2626] transition-colors flex flex-col gap-2 cursor-pointer shadow-sm"
+                    style={{ backgroundColor: "#ffffff", color: "#000000" }}
+                    className="w-full text-left p-4 rounded-xl bg-white text-black border-2 border-slate-300 hover:border-[#dc2626] transition-colors flex flex-col gap-2 cursor-pointer shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-2 text-[11px] font-bold">
                       <span className="px-2 py-0.5 rounded bg-[#0f172a] text-white uppercase">
                         {entry.source}
                       </span>
-                      <span className="font-mono text-slate-600">{entry.asked_on}</span>
+                      <span className="font-mono text-black">{entry.asked_on}</span>
                     </div>
-                    <p className="text-sm font-semibold text-[#0f172a] line-clamp-3 leading-snug">
+                    <p className="text-sm font-semibold text-black line-clamp-3 leading-snug">
                       {entry.question_text}
                     </p>
                     <div className="flex items-center justify-between pt-1">
                       <div className="flex items-center gap-1.5">
                         {entry.recalled && (
-                          <span className="px-2 py-0.5 rounded bg-slate-200 text-[#0f172a] text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded bg-slate-200 text-black text-[10px] font-bold">
                             From memory
                           </span>
                         )}
                       </div>
-                      <span className="text-xs font-black text-[#dc2626] uppercase">
+                      <span className="text-xs font-black text-red-600 uppercase">
                         Tap to Label →
                       </span>
                     </div>
@@ -905,13 +948,13 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
               {/* Summary Bar: this week's count + total labeled */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div className="p-3.5 rounded-xl bg-[#16233b] border border-slate-700">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-white">
                     This Week
                   </p>
                   <p className="text-2xl font-black text-white mt-0.5">{thisWeekCount}</p>
                 </div>
                 <div className="p-3.5 rounded-xl bg-[#16233b] border border-slate-700">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-white">
                     Total Labeled
                   </p>
                   <p className="text-2xl font-black text-white mt-0.5">{totalLabeledCount}</p>
@@ -919,21 +962,21 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
               </div>
 
               <div className="flex items-center justify-between mt-1">
-                <h2 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                <h2 className="text-xs font-black uppercase tracking-wider text-white">
                   All My Entries (Newest First)
                 </h2>
-                <span className="text-xs font-mono text-slate-300">{myLogNewestFirst.length} total</span>
+                <span className="text-xs font-mono text-white">{myLogNewestFirst.length} total</span>
               </div>
 
               {loadingEntries ? (
-                <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-slate-300">
+                <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center text-xs text-white">
                   Loading your log...
                 </div>
               ) : myLogNewestFirst.length === 0 ? (
                 <div className="p-6 rounded-xl bg-[#16233b] border border-slate-700 text-center flex flex-col items-center gap-2">
-                  <ClipboardList className="w-8 h-8 text-slate-300" />
+                  <ClipboardList className="w-8 h-8 text-white" />
                   <p className="text-sm font-bold text-white">No entries yet</p>
-                  <p className="text-xs text-slate-300">
+                  <p className="text-xs text-white">
                     Use Quick Add to save your first customer question.
                   </p>
                 </div>
@@ -950,7 +993,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                   return (
                     <div
                       key={entry.id}
-                      className="p-4 rounded-xl bg-white text-[#0f172a] border-2 border-slate-300 flex flex-col gap-2 shadow-sm"
+                      style={{ backgroundColor: "#ffffff", color: "#000000" }}
+                      className="p-4 rounded-xl bg-white text-black border-2 border-slate-300 flex flex-col gap-2 shadow-sm"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-1.5 text-[11px] font-bold">
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -960,7 +1004,7 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                           <span
                             className={`px-2 py-0.5 rounded uppercase ${
                               entry.status === "labeled"
-                                ? "bg-slate-200 text-[#0f172a]"
+                                ? "bg-slate-200 text-black"
                                 : "bg-[#dc2626] text-white"
                             }`}
                           >
@@ -972,26 +1016,26 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                                 ? "bg-[#dc2626] text-white"
                                 : reviewed
                                 ? "bg-[#0f172a] text-white"
-                                : "bg-slate-100 text-[#0f172a] border border-slate-300"
+                                : "bg-slate-100 text-black border border-slate-300"
                             }`}
                           >
                             {reviewLabel}
                           </span>
                           {entry.recalled && (
-                            <span className="px-2 py-0.5 rounded bg-slate-200 text-[#0f172a]">
+                            <span className="px-2 py-0.5 rounded bg-slate-200 text-black">
                               From memory
                             </span>
                           )}
                         </div>
-                        <span className="font-mono text-slate-600">{entry.asked_on}</span>
+                        <span className="font-mono text-black">{entry.asked_on}</span>
                       </div>
 
-                      <p className="text-sm font-semibold text-[#0f172a] leading-snug whitespace-pre-wrap break-words">
+                      <p className="text-sm font-semibold text-black leading-snug whitespace-pre-wrap break-words">
                         {entry.question_text}
                       </p>
 
                       {entry.status === "labeled" && (
-                        <div className="text-xs text-slate-700 flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-slate-200">
+                        <div className="text-xs text-black flex flex-wrap gap-x-3 gap-y-1 pt-1 border-t border-slate-200">
                           <span>
                             <strong>Intent:</strong> {entry.intent || "—"}
                           </span>
@@ -1005,12 +1049,12 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                       )}
 
                       {needsFix && (
-                        <div className="p-2.5 rounded-lg bg-[#fef2f2] border border-[#dc2626] text-[#0f172a] text-xs flex flex-col gap-2">
+                        <div className="p-2.5 rounded-lg bg-[#fef2f2] border border-[#dc2626] text-black text-xs flex flex-col gap-2">
                           <div>
-                            <span className="font-black text-[#dc2626] uppercase block">
+                            <span className="font-black text-red-600 uppercase block">
                               Manager Review Note:
                             </span>
-                            <span className="font-medium">
+                            <span className="font-medium text-black">
                               {entry.review_note || "Please update these labels."}
                             </span>
                           </div>
@@ -1025,8 +1069,8 @@ export default function CustomerQuestionLog({ person, onBack }: CustomerQuestion
                       )}
 
                       {reviewed && (
-                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 pt-0.5">
-                          <Lock className="w-3.5 h-3.5 text-[#0f172a]" />
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-black pt-0.5">
+                          <Lock className="w-3.5 h-3.5 text-black" />
                           <span>Reviewed &amp; locked</span>
                         </div>
                       )}
