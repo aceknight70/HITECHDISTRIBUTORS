@@ -61,7 +61,7 @@ import {
   Moon,
   Users,
   Store, Handshake, ExternalLink, Bot, ArrowLeft, Phone, DollarSign, PackageCheck, Copy, Check, AlertCircle, Share2, Link,
-  Truck, Key, LogOut
+  Truck, Key, LogOut, ClipboardList
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ManagerManageStaff from "./components/ManagerManageStaff";
@@ -69,6 +69,8 @@ import ManagerPeopleSection from "./components/ManagerPeopleSection";
 import ChangeMyPinModal from "./components/ChangeMyPinModal";
 import AdminReAuthDialog from "./components/AdminReAuthDialog";
 import LockoutCountdownBanner, { useLockoutRemainingSeconds } from "./components/LockoutCountdownBanner";
+import CustomerQuestionLog from "./components/CustomerQuestionLog";
+import ManagerQuestionLogReview from "./components/ManagerQuestionLogReview";
 import { supabase, base64ToBlob, uploadToSupabaseStorage, fetchHubAllies, saveHubAlly, deleteHubAlly, fetchHubTenants, saveHubTenant, deleteHubTenant, logAllyReferral, logTenantTraffic, findMatchingTenant, HubAlly, HubTenant, HubTenantProduct, HubTenantCommission, HubTenantOrder, MasterTenantNotification } from "./lib/supabase";
 import * as db from "./lib/supabase";
 import { PRODUCTS as initialProducts, SOLAR_PRODUCTS as initialSolarProducts, CATEGORIES, SOLAR_CATEGORIES, Product, SolarProduct, DEFAULT_CSV_DATA } from "./data/catalog";
@@ -999,9 +1001,13 @@ export default function App() {
 
   // Unified Staff / Manager / Master session (no PIN ever stored)
   const [hitechSession, setHitechSession] = useState<db.HiTechSession | null>(() => db.getHiTechSession());
+  const [showQuestionLog, setShowQuestionLog] = useState(false);
   const updateHiTechSession = (next: db.HiTechSession | null) => {
     db.setHiTechSession(next);
     setHitechSession(next);
+    if (!next) {
+      setShowQuestionLog(false);
+    }
   };
   const staffIsLoggedIn = Boolean(
     hitechSession && ["staff", "manager", "master"].includes((hitechSession.role || "").toLowerCase())
@@ -1021,11 +1027,15 @@ export default function App() {
   const [managerLoginCode, setManagerLoginCode] = useState("");
   const [managerLoginPin, setManagerLoginPin] = useState("");
   const [managerError, setManagerError] = useState("");
+  const [managerIsLocked, setManagerIsLocked] = useState(false);
   const [managerLockedUntil, setManagerLockedUntil] = useState<string | null>(null);
   const [managerLoginLoading, setManagerLoginLoading] = useState(false);
-  const managerLockRemaining = useLockoutRemainingSeconds(managerLockedUntil, () => setManagerLockedUntil(null));
+  const managerLockRemaining = useLockoutRemainingSeconds(managerLockedUntil, () => {
+    setManagerLockedUntil(null);
+    setManagerIsLocked(false);
+  });
   const [showChangeMyPinModal, setShowChangeMyPinModal] = useState(false);
-  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ally" | "tenant" | "people" | "manage-staff" | "sheets" | "store-settings">("menu");
+  const [activeManagerTab, setActiveManagerTab] = useState<"menu" | "ally" | "tenant" | "people" | "manage-staff" | "sheets" | "store-settings" | "question-log">("menu");
 
   const [hubAllies, setHubAllies] = useState<HubAlly[]>([]);
   const [hubTenants, setHubTenants] = useState<HubTenant[]>([]);
@@ -1151,14 +1161,14 @@ export default function App() {
 
   // Lock background body scroll whenever tenant space or modal is open to ensure internal scrolling works 100%
   useEffect(() => {
-    if (activeTenantSpace || showTenantDirectory || pendingTenantConfirmation || showAllyDirectory || activeAllyModal || showTenantSelfService || lightboxPhotoIndex !== null || orderingProduct !== null || masterEditingPinTenant !== null) {
+    if (activeTenantSpace || showTenantDirectory || pendingTenantConfirmation || showAllyDirectory || activeAllyModal || showTenantSelfService || showQuestionLog || lightboxPhotoIndex !== null || orderingProduct !== null || masterEditingPinTenant !== null) {
       const origOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {
         document.body.style.overflow = origOverflow;
       };
     }
-  }, [activeTenantSpace, showTenantDirectory, pendingTenantConfirmation, showAllyDirectory, activeAllyModal, showTenantSelfService, lightboxPhotoIndex, orderingProduct, masterEditingPinTenant]);
+  }, [activeTenantSpace, showTenantDirectory, pendingTenantConfirmation, showAllyDirectory, activeAllyModal, showTenantSelfService, showQuestionLog, lightboxPhotoIndex, orderingProduct, masterEditingPinTenant]);
 
   const [staffDirectory, setStaffDirectory] = useState([
     { id: "HTD-001", name: "Alice K.", role: "Sales Rep" },
@@ -1521,9 +1531,13 @@ export default function App() {
   const [staffLoginCode, setStaffLoginCode] = useState("");
   const [staffLoginPin, setStaffLoginPin] = useState("");
   const [staffError, setStaffError] = useState("");
+  const [staffIsLocked, setStaffIsLocked] = useState(false);
   const [staffLockedUntil, setStaffLockedUntil] = useState<string | null>(null);
   const [staffLoginLoading, setStaffLoginLoading] = useState(false);
-  const staffLockRemaining = useLockoutRemainingSeconds(staffLockedUntil, () => setStaffLockedUntil(null));
+  const staffLockRemaining = useLockoutRemainingSeconds(staffLockedUntil, () => {
+    setStaffLockedUntil(null);
+    setStaffIsLocked(false);
+  });
   const [csvText, setCsvText] = useState("");
   const [csvStatus, setCsvStatus] = useState("");
   const [sheetSearch, setSheetSearch] = useState("");
@@ -2722,12 +2736,14 @@ Issue: ${escDesc}`;
       const res = await db.hitechLogin(codeVal, pinVal);
       if (!res.ok) {
         setStaffError(res.message || "Authentication failed.");
+        setStaffIsLocked(Boolean(res.locked));
         setStaffLockedUntil(res.locked ? (res.locked_until || null) : null);
         return;
       }
       const roleLower = (res.role || "").toLowerCase();
       if (!["staff", "manager", "master"].includes(roleLower)) {
         setStaffError("Access denied. Staff, Manager, or Master role required.");
+        setStaffIsLocked(false);
         setStaffLockedUntil(null);
         return;
       }
@@ -2739,6 +2755,7 @@ Issue: ${escDesc}`;
       });
       setStaffLoginCode("");
       setStaffError("");
+      setStaffIsLocked(false);
       setStaffLockedUntil(null);
     } finally {
       setStaffLoginLoading(false);
@@ -2764,12 +2781,14 @@ Issue: ${escDesc}`;
       const res = await db.hitechLogin(codeVal, pinVal);
       if (!res.ok) {
         setManagerError(res.message || "Authentication failed.");
+        setManagerIsLocked(Boolean(res.locked));
         setManagerLockedUntil(res.locked ? (res.locked_until || null) : null);
         return;
       }
       const roleLower = (res.role || "").toLowerCase();
       if (!["manager", "master"].includes(roleLower)) {
         setManagerError("Access denied. Manager or Master role is required.");
+        setManagerIsLocked(false);
         setManagerLockedUntil(null);
         return;
       }
@@ -2781,6 +2800,7 @@ Issue: ${escDesc}`;
       });
       setManagerLoginCode("");
       setManagerError("");
+      setManagerIsLocked(false);
       setManagerLockedUntil(null);
     } finally {
       setManagerLoginLoading(false);
@@ -5383,11 +5403,14 @@ Issue: ${escDesc}`;
                         style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                       />
                     </div>
-                    {managerLockedUntil ? (
+                    {managerIsLocked || managerLockedUntil ? (
                       <LockoutCountdownBanner
                         lockedUntil={managerLockedUntil}
                         message={managerError}
-                        onExpired={() => setManagerLockedUntil(null)}
+                        onExpired={() => {
+                          setManagerLockedUntil(null);
+                          setManagerIsLocked(false);
+                        }}
                       />
                     ) : (
                       managerError && <p className="text-xs text-red-400 font-mono text-center">{managerError}</p>
@@ -5492,6 +5515,14 @@ Issue: ${escDesc}`;
                           <div>
                             <h4 className="font-bold text-[11px] text-white uppercase">Sheet Manager</h4>
                             <p className="text-[9px] text-[var(--mu)] mt-0.5">Full access to catalog CSV sync</p>
+                          </div>
+                        </button>
+
+                        <button onClick={() => setActiveManagerTab("question-log")} className="col-span-2 p-4 bg-[#0f172a] border-2 border-[#dc2626]/70 rounded-xl flex flex-col gap-2 items-center text-center hover:bg-[#16233b] transition-colors cursor-pointer">
+                          <ClipboardList className="w-6 h-6 text-[#dc2626]" />
+                          <div>
+                            <h4 className="font-bold text-[11px] text-white uppercase">Question Log Review</h4>
+                            <p className="text-[9px] text-slate-300 mt-0.5">Review staff customer questions &amp; export CSV</p>
                           </div>
                         </button>
                       </div>
@@ -5956,6 +5987,10 @@ Issue: ${escDesc}`;
                       <ManagerPeopleSection session={hitechSession} onBack={() => setActiveManagerTab("menu")} />
                     )}
 
+                    {activeManagerTab === "question-log" && hitechSession && (
+                      <ManagerQuestionLogReview session={hitechSession} onBack={() => setActiveManagerTab("menu")} />
+                    )}
+
                     {activeManagerTab === "manage-staff" && (<ManagerManageStaff onBack={() => setActiveManagerTab("menu")} />)}
 
                     {activeManagerTab === "store-settings" && (
@@ -6192,11 +6227,14 @@ Issue: ${escDesc}`;
                         style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
                       />
                     </div>
-                    {staffLockedUntil ? (
+                    {staffIsLocked || staffLockedUntil ? (
                       <LockoutCountdownBanner
                         lockedUntil={staffLockedUntil}
                         message={staffError}
-                        onExpired={() => setStaffLockedUntil(null)}
+                        onExpired={() => {
+                          setStaffLockedUntil(null);
+                          setStaffIsLocked(false);
+                        }}
                       />
                     ) : (
                       staffError && <p className="text-xs text-red-400 font-mono text-center">{staffError}</p>
@@ -6243,6 +6281,16 @@ Issue: ${escDesc}`;
                         </button>
                       </div>
                     </div>
+
+                    {/* Prominent Customer Question Log Entry Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionLog(true)}
+                      className="w-full py-3.5 px-4 rounded-xl bg-[#dc2626] hover:bg-[#b91c1c] border-2 border-white/25 text-white font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-lg cursor-pointer transition-colors"
+                    >
+                      <ClipboardList className="w-5 h-5 text-white shrink-0" />
+                      <span>Customer Question Log</span>
+                    </button>
 
                     {/* Dynamic Preset Switch */}
                     <div className="p-4 bg-[var(--dk2)] rounded-xl border border-[var(--border)]">
@@ -7327,6 +7375,24 @@ Issue: ${escDesc}`;
                   <span className="text-[7px] font-black mt-[1px] tracking-wide">TENANT</span>
                 </motion.button>
               )}
+              {!activeTenantSpace &&
+                !pendingTenantConfirmation &&
+                !showTenantSelfService &&
+                !showQuestionLog &&
+                !["invoice", "staff", "manager", "master"].includes(currentRoom) && (
+                  <motion.button
+                    drag
+                    dragMomentum={false}
+                    onClick={() => setCurrentRoom("staff")}
+                    className="w-12 h-12 bg-[#facc15] hover:bg-[#fde047] rounded-full flex flex-col items-center justify-center text-[#0f172a] shadow-[0_4px_15px_rgba(250,204,21,0.45)] border-2 border-[#0f172a]/20 cursor-grab active:cursor-grabbing pointer-events-auto"
+                    title={staffIsLoggedIn ? "Open Staff Corner Portal" : "Staff Room Login"}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Users className="w-4 h-4 text-[#0f172a]" />
+                    <span className="text-[7px] font-black mt-[1px] tracking-wide text-[#0f172a]">STAFF</span>
+                  </motion.button>
+                )}
             </div>
           )}
 
@@ -8863,6 +8929,13 @@ Issue: ${escDesc}`;
           personCode={hitechSession.code}
           personName={hitechSession.name}
           onClose={() => setShowChangeMyPinModal(false)}
+        />
+      )}
+
+      {showQuestionLog && hitechSession && (
+        <CustomerQuestionLog
+          person={hitechSession}
+          onBack={() => setShowQuestionLog(false)}
         />
       )}
 

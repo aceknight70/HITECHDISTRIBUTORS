@@ -18,8 +18,6 @@ import {
   ShieldCheck,
   Info,
   Lock,
-  Eye,
-  EyeOff,
   Share2,
   Copy,
   Link,
@@ -62,16 +60,19 @@ export default function TenantSelfService({
     isAlreadyAuthenticatedForTarget ? currentSessionTenant : null
   );
   const [inputPin, setInputPin] = useState("");
-  const [showPin, setShowPin] = useState(false);
   const [selectedTenantId, setSelectedTenantId] = useState(initialTenant ? initialTenant.id : "");
   const [allTenantsList, setAllTenantsList] = useState<HubTenant[]>([]);
   const [loginError, setLoginError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
 
-  // Server-enforced lockout timestamp returned by hitech_tenant_login
+  // Server-enforced lockout state returned by hitech_tenant_login
+  const [isLocked, setIsLocked] = useState(false);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
-  const lockoutRemainingSecs = useLockoutRemainingSeconds(lockedUntil, () => setLockedUntil(null));
+  const lockoutRemainingSecs = useLockoutRemainingSeconds(lockedUntil, () => {
+    setLockedUntil(null);
+    setIsLocked(false);
+  });
 
   // Settings & Profile Edit State (no PIN stored here)
   const [profileForm, setProfileForm] = useState({
@@ -288,6 +289,7 @@ export default function TenantSelfService({
           latestTenants.find(t => t.referral_code?.toUpperCase() === chosenTenant.referral_code.toUpperCase()) ||
           chosenTenant;
 
+        setIsLocked(false);
         setLockedUntil(null);
         setAuthenticatedTenant(matched);
         if (onAuthenticated) onAuthenticated(matched);
@@ -295,8 +297,10 @@ export default function TenantSelfService({
       } else {
         setLoginError(res.message || "Invalid credentials. Access denied.");
         if (res.locked) {
+          setIsLocked(true);
           setLockedUntil(res.locked_until || null);
         } else {
+          setIsLocked(false);
           setLockedUntil(null);
         }
       }
@@ -607,6 +611,7 @@ export default function TenantSelfService({
                   onChange={e => {
                     setSelectedTenantId(e.target.value);
                     setLoginError("");
+                    setIsLocked(false);
                     setLockedUntil(null);
                   }}
                   disabled={lockoutRemainingSecs > 0}
@@ -631,42 +636,34 @@ export default function TenantSelfService({
                 <span className="text-[10px] font-semibold text-emerald-400 font-mono">No Password Required</span>
               </div>
 
-              <div className="relative">
-                <input
-                  type={showPin ? "text" : "password"}
-                  value={inputPin}
-                  onChange={e => {
-                    setInputPin(e.target.value);
-                    setLoginError("");
-                  }}
-                  disabled={lockoutRemainingSecs > 0}
-                  placeholder="Enter your PIN"
-                  maxLength={10}
-                  className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-3 pr-10 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none placeholder:text-slate-500 placeholder:tracking-normal disabled:opacity-50 shadow-sm"
-                  style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  disabled={lockoutRemainingSecs > 0}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-800 cursor-pointer p-1"
-                  title={showPin ? "Hide PIN" : "Show PIN"}
-                >
-                  {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={inputPin}
+                onChange={e => {
+                  setInputPin(e.target.value);
+                  setLoginError("");
+                }}
+                disabled={lockoutRemainingSecs > 0}
+                placeholder="Enter your PIN"
+                className="w-full bg-white border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-3 text-sm font-mono text-slate-900 font-bold tracking-widest outline-none placeholder:text-slate-500 placeholder:tracking-normal disabled:opacity-50 shadow-sm"
+                style={{ backgroundColor: "#ffffff", color: "#0f172a" }}
+                autoFocus
+              />
 
               <p className="text-[10px] text-slate-400 mt-1.5 leading-normal">
                 Direct PIN access: Enter your secret numerical PIN. Public referral codes cannot unlock edit mode.
               </p>
             </div>
 
-            {lockedUntil ? (
+            {isLocked || lockedUntil ? (
               <LockoutCountdownBanner
                 lockedUntil={lockedUntil}
                 message={loginError}
-                onExpired={() => setLockedUntil(null)}
+                onExpired={() => {
+                  setLockedUntil(null);
+                  setIsLocked(false);
+                }}
               />
             ) : loginError ? (
               <div className="p-3 bg-red-950/90 border border-red-800 text-red-300 rounded-xl text-xs font-mono flex items-center gap-2">

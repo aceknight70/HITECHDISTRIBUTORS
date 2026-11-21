@@ -24,10 +24,14 @@ export default function MasterSection({ session, onSessionChange }: MasterSectio
   const [masterCode, setMasterCode] = useState("");
   const [masterPin, setMasterPin] = useState("");
   const [error, setError] = useState("");
+  const [isLocked, setIsLocked] = useState(false);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [showChangeMyPin, setShowChangeMyPin] = useState(false);
-  const lockRemaining = useLockoutRemainingSeconds(lockedUntil, () => setLockedUntil(null));
+  const lockRemaining = useLockoutRemainingSeconds(lockedUntil, () => {
+    setLockedUntil(null);
+    setIsLocked(false);
+  });
 
   // Tenant PIN setter state (server-side via AdminReAuthDialog)
   const [pinTargetTenant, setPinTargetTenant] = useState<any | null>(null);
@@ -136,8 +140,10 @@ export default function MasterSection({ session, onSessionChange }: MasterSectio
       if (!res.ok) {
         setError(res.message || "Authentication failed.");
         if (res.locked) {
+          setIsLocked(true);
           setLockedUntil(res.locked_until || null);
         } else {
+          setIsLocked(false);
           setLockedUntil(null);
         }
         return;
@@ -145,6 +151,7 @@ export default function MasterSection({ session, onSessionChange }: MasterSectio
 
       if ((res.role || "").toLowerCase() !== "master") {
         setError("Access denied. Master role is required for Master Section.");
+        setIsLocked(false);
         setLockedUntil(null);
         return;
       }
@@ -157,6 +164,7 @@ export default function MasterSection({ session, onSessionChange }: MasterSectio
       });
       setMasterCode("");
       setError("");
+      setIsLocked(false);
       setLockedUntil(null);
     } finally {
       setLoginLoading(false);
@@ -287,11 +295,14 @@ export default function MasterSection({ session, onSessionChange }: MasterSectio
               placeholder="••••"
             />
           </div>
-          {lockedUntil ? (
+          {isLocked || lockedUntil ? (
             <LockoutCountdownBanner
               lockedUntil={lockedUntil}
               message={error}
-              onExpired={() => setLockedUntil(null)}
+              onExpired={() => {
+                setLockedUntil(null);
+                setIsLocked(false);
+              }}
             />
           ) : (
             error && <p className="text-xs text-red-400 text-center font-mono font-bold">{error}</p>

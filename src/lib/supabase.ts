@@ -2323,3 +2323,290 @@ export async function approveWeeklyLog(id: string, managerName: string) {
   if (error) console.error("Error approving weekly log:", error);
   return data;
 }
+
+// -------------------------------------------------------------
+// CUSTOMER QUESTION LOG API (Supabase hitech_question_log only)
+// -------------------------------------------------------------
+
+export const QUESTION_LOG_SOURCES = [
+  "Store",
+  "Facebook",
+  "WhatsApp",
+  "Walk-in",
+  "Phone",
+  "Ticket",
+  "Other",
+] as const;
+
+export const QUESTION_LOG_INTENTS = [
+  "Billing",
+  "Technical",
+  "Account",
+  "Product Enquiry",
+  "Other",
+] as const;
+
+export const QUESTION_LOG_SENTIMENTS = [
+  "Positive",
+  "Neutral",
+  "Negative",
+] as const;
+
+export const QUESTION_LOG_PII_KINDS = [
+  "Name",
+  "Phone number",
+  "Email",
+  "Address",
+  "Other",
+] as const;
+
+export const QUESTION_LOG_CONFIDENCES = ["Clear", "Tricky"] as const;
+
+export const QUESTION_LOG_TRICKY_REASONS = [
+  "Could be two intents",
+  "Wording unclear",
+  "Mixed feeling",
+  "Other",
+] as const;
+
+export const QUESTION_LOG_STORE_HAD_ANSWER = [
+  "Yes",
+  "No",
+  "Not sure",
+] as const;
+
+export const QUESTION_LOG_MISSING_ITEMS = [
+  "Price",
+  "Stock",
+  "Delivery info",
+  "Specs",
+  "Photo",
+  "Other",
+] as const;
+
+export type QuestionLogSource = (typeof QUESTION_LOG_SOURCES)[number];
+export type QuestionLogIntent = (typeof QUESTION_LOG_INTENTS)[number];
+export type QuestionLogSentiment = (typeof QUESTION_LOG_SENTIMENTS)[number];
+export type QuestionLogPiiKind = (typeof QUESTION_LOG_PII_KINDS)[number];
+export type QuestionLogConfidence = (typeof QUESTION_LOG_CONFIDENCES)[number];
+export type QuestionLogTrickyReason = (typeof QUESTION_LOG_TRICKY_REASONS)[number];
+export type QuestionLogStoreHadAnswer = (typeof QUESTION_LOG_STORE_HAD_ANSWER)[number];
+export type QuestionLogMissingItem = (typeof QUESTION_LOG_MISSING_ITEMS)[number];
+
+export interface HiTechQuestionLogEntry {
+  id: string;
+  entry_no?: number;
+  client_id: string;
+  logged_by_staff_id: string;
+  logged_by_name: string;
+  asked_on: string;
+  logged_at: string;
+  updated_at?: string;
+  source: QuestionLogSource;
+  recalled: boolean;
+  question_text: string;
+  status: "unlabeled" | "labeled";
+  intent?: QuestionLogIntent | null;
+  sentiment?: QuestionLogSentiment | null;
+  pii_present?: boolean | null;
+  pii_kind?: QuestionLogPiiKind | null;
+  confidence?: QuestionLogConfidence | null;
+  tricky_reasons?: string[] | null;
+  tricky_note?: string | null;
+  store_had_answer?: QuestionLogStoreHadAnswer | null;
+  missing_items?: string[] | null;
+  review_status?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+}
+
+export const QUESTION_LOG_PII_WARNING =
+  "Please replace personal details with [PHONE] or [EMAIL] and set Personal details to Yes.";
+
+export function containsRawPii(text: string): boolean {
+  if (!text) return false;
+  const collapsedDigits = text.replace(/[\s-]+/g, "");
+  if (/\d{10,}/.test(collapsedDigits)) return true;
+  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text)) return true;
+  return false;
+}
+
+export function isQuestionLogNeedsFix(reviewStatus?: string | null): boolean {
+  if (!reviewStatus) return false;
+  const norm = reviewStatus.trim().toLowerCase();
+  return norm === "needs_fix" || norm === "needs fix";
+}
+
+export function isQuestionLogReviewed(reviewStatus?: string | null): boolean {
+  return (reviewStatus || "").trim().toLowerCase() === "reviewed";
+}
+
+export function getLocalTodayIsoDate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function formatDbErrorMessage(err: any, fallback: string): string {
+  if (!err) return fallback;
+  const msg = typeof err === "string" ? err : err.message || err.details || err.hint;
+  return msg ? String(msg) : fallback;
+}
+
+export async function fetchStaffQuestionLogs(staffCode: string): Promise<HiTechQuestionLogEntry[]> {
+  const { data, error } = await supabase
+    .from("hitech_question_log")
+    .select("*")
+    .eq("client_id", CLIENT_ID)
+    .eq("logged_by_staff_id", staffCode)
+    .order("logged_at", { ascending: false });
+
+  if (error) {
+    throw new Error(formatDbErrorMessage(error, "Could not load your question log entries."));
+  }
+  return (data || []) as HiTechQuestionLogEntry[];
+}
+
+export async function fetchAllQuestionLogs(): Promise<HiTechQuestionLogEntry[]> {
+  const { data, error } = await supabase
+    .from("hitech_question_log")
+    .select("*")
+    .eq("client_id", CLIENT_ID)
+    .order("logged_at", { ascending: false });
+
+  if (error) {
+    throw new Error(formatDbErrorMessage(error, "Could not load customer question log entries."));
+  }
+  return (data || []) as HiTechQuestionLogEntry[];
+}
+
+export async function createQuestionLogEntry(payload: {
+  logged_by_staff_id: string;
+  logged_by_name: string;
+  asked_on: string;
+  source: QuestionLogSource;
+  recalled: boolean;
+  question_text: string;
+}): Promise<HiTechQuestionLogEntry> {
+  const { data, error } = await supabase
+    .from("hitech_question_log")
+    .insert([
+      {
+        client_id: CLIENT_ID,
+        logged_by_staff_id: payload.logged_by_staff_id,
+        logged_by_name: payload.logged_by_name,
+        asked_on: payload.asked_on,
+        source: payload.source,
+        recalled: payload.recalled,
+        question_text: payload.question_text.trim(),
+        status: "unlabeled",
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(formatDbErrorMessage(error, "Could not save question entry."));
+  }
+  return data as HiTechQuestionLogEntry;
+}
+
+export async function updateQuestionLogLabels(
+  id: string,
+  payload: {
+    intent: QuestionLogIntent;
+    sentiment: QuestionLogSentiment;
+    pii_present: boolean;
+    pii_kind: QuestionLogPiiKind | null;
+    confidence: QuestionLogConfidence;
+    tricky_reasons: string[];
+    tricky_note: string | null;
+    store_had_answer: QuestionLogStoreHadAnswer;
+    missing_items: string[];
+    resetReviewToPending?: boolean;
+  }
+): Promise<HiTechQuestionLogEntry> {
+  const updateBody: Record<string, any> = {
+    status: "labeled",
+    intent: payload.intent,
+    sentiment: payload.sentiment,
+    pii_present: payload.pii_present,
+    pii_kind: payload.pii_present ? payload.pii_kind : null,
+    confidence: payload.confidence,
+    tricky_reasons: payload.confidence === "Tricky" ? payload.tricky_reasons : [],
+    tricky_note: payload.confidence === "Tricky" ? (payload.tricky_note?.trim() || null) : null,
+    store_had_answer: payload.store_had_answer,
+    missing_items: payload.store_had_answer === "No" ? payload.missing_items : [],
+    updated_at: new Date().toISOString(),
+  };
+
+  if (payload.resetReviewToPending) {
+    updateBody.review_status = "pending";
+  }
+
+  const { data, error } = await supabase
+    .from("hitech_question_log")
+    .update(updateBody)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(formatDbErrorMessage(error, "Could not save labels."));
+  }
+  return data as HiTechQuestionLogEntry;
+}
+
+export async function reviewQuestionLogEntry(
+  id: string,
+  payload: {
+    decision: "reviewed" | "needs_fix";
+    reviewed_by: string;
+    review_note?: string | null;
+  }
+): Promise<HiTechQuestionLogEntry> {
+  const nowIso = new Date().toISOString();
+  const baseBody: Record<string, any> = {
+    review_status: payload.decision,
+    reviewed_by: payload.reviewed_by,
+    reviewed_at: nowIso,
+    updated_at: nowIso,
+  };
+  if (payload.decision === "needs_fix") {
+    baseBody.review_note = payload.review_note?.trim() || "";
+  }
+
+  const { data, error } = await supabase
+    .from("hitech_question_log")
+    .update(baseBody)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (
+    error &&
+    payload.decision === "needs_fix" &&
+    (error.code === "23514" || (error.message || "").toLowerCase().includes("review_status"))
+  ) {
+    // Support check constraints that use spaced 'needs fix' instead of 'needs_fix'
+    const retry = await supabase
+      .from("hitech_question_log")
+      .update({ ...baseBody, review_status: "needs fix" })
+      .eq("id", id)
+      .select()
+      .single();
+    if (retry.error) {
+      throw new Error(formatDbErrorMessage(retry.error, "Could not save review status."));
+    }
+    return retry.data as HiTechQuestionLogEntry;
+  }
+
+  if (error) {
+    throw new Error(formatDbErrorMessage(error, "Could not save review status."));
+  }
+  return data as HiTechQuestionLogEntry;
+}
+
